@@ -3,14 +3,20 @@ import mne
 from pathlib import Path
 import pyxdf
 
+def load_one_channel_data(path: str, channel_index: int = 4): # Default C3 channel (motor cortex)
+    fp = Path(path)
+    raw, _, _ = get_raw_offline(fp)
+    X = raw.get_data()
+    x = X[channel_index, :]  
+
+    return x
+
 def load_data(path: str):
     fp = Path(path)
     raw, _, _ = get_raw_offline(fp)
     X = raw.get_data()
-    x = X[4, :]  # Use C3 channel (motor cortex)
 
-    return x
-
+    return X
 
 
 def get_raw_offline(
