@@ -15,4 +15,5 @@ dependencies = [
     "pyyaml>=6.0.3",
     "scikit-learn>=1.7.2",
     "umap-learn>=0.5.9.post2",
+    "pyqt5>=5.15.11",
 ]
