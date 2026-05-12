@@ -35,8 +35,8 @@ def use_ICA(raw: mne.io.RawArray, n_components=20, random_state=97, max_iter="au
 
 def compare_results(raw_path: str, method: str = "ICA"):
     # 1. Setup local repository directory for plots
-    plots_dir = Path("plots/temp")
-    plots_dir.mkdir(exist_ok=True) # Creates the folder if it doesn't exist
+    plots_dir = Path(f"plots/artifact_removal/{method}/temp")
+    plots_dir.mkdir(parents=True, exist_ok=True) # Creates the folder if it doesn't exist
     
     raw, _, _ = get_raw_offline(Path(raw_path))
     
