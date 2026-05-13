@@ -4,9 +4,44 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy.signal as sig
 from loading_helpers import load_one_channel_data
+import mne
 
 # Function to apply causal 4th order IIR filter (for online MI)
-def apply_casual_filter_iir(x):
+
+def apply_causal_filter_iir(raw: mne.io.RawArray) -> mne.io.RawArray:
+    """
+    Apply a causal 4th-order Butterworth IIR band-pass filter from 8–30 Hz
+    to an MNE RawArray.
+
+    This uses sosfilt, not sosfiltfilt, so it is suitable for online/causal
+    filtering. The returned RawArray is a filtered copy of the input.
+    """
+    raw_filt = raw.copy()
+
+    fs = raw.info["sfreq"]
+
+    sos = sig.butter(
+        N=4,
+        Wn=[8, 30],
+        btype="bandpass",
+        fs=fs,
+        output="sos",
+    )
+
+    data = raw_filt.get_data()  # shape: (n_channels, n_samples)
+
+    filtered_data = sig.sosfilt(
+        sos,
+        data,
+        axis=1,  # filter along time axis
+    )
+
+    raw_filt._data = filtered_data
+
+    return raw_filt
+
+
+def apply_causal_filter_iir_one_channel(x):
     sos = sig.butter(
         N=4,
         Wn=[8,30],
