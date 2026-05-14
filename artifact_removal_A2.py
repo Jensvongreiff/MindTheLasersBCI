@@ -45,7 +45,7 @@ def compare_results(raw_path: str, method: str = "ICA"):
     fig_raw.savefig(plots_dir / "01_raw_data_before.pdf")
     plt.show() # Blocks until you close the window
 
-
+    
     if method == "ICA":
         result, ica = use_ICA(raw, n_components=20, random_state=97, max_iter="auto", method="fastica")
         
