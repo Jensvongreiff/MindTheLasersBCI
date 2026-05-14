@@ -11,7 +11,7 @@ Welcome to the repository for Team 4's Brain-Computer Interface (BCI) Practical 
 
 ## ⚙️ Environment Setup & Installation
 
-**⚠️ Important Notice Regarding OS Compatibility:** We are currently in the process of migrating our development environment from Ubuntu to a fully Windows-based setup. As a result, the current build may not be completely stable on Windows. Specifically, building `PyQt5` using `uv` currently fails on Windows machines. 
+**⚠️ Important Notice Regarding OS Compatibility:** We are currently in the process of migrating our development environment from Ubuntu to a fully Windows-based setup. As a result, the current build may not be completely stable on Windows. Specifically, building `PyQt5` using `uv` currently fails on Windows machines. The pyproject.toml has been updated to work on windows, with certain scripts requiring the pyproject_linux.toml environment to function.
 
 *If reviewing this specific commit on Windows, please be aware of this limitation. A fully functional Windows implementation will be provided starting with Submission 3.*
 
@@ -53,7 +53,7 @@ Files are suffixed according to their **Week 3 Exercise** for ease of grading.
 Evaluated multiple filter candidates, ultimately selecting a 4th-order IIR Butterworth filter over higher-tap FIR filters for optimal magnitude response and latency tradeoffs.
 
 ### Artifact Removal:
- Applied Independent Component Analysis (ICA) to identify and remove ocular and muscular artifacts from the raw signal.
+ Applied Independent Component Analysis (ICA) to identify and remove ocular and muscular artifacts from the raw signal. The pyproject_linux.toml environment must be used to run this task.
 
 ### Signal Characterization:
 Analyzed Event-Related Desynchronization/Synchronization (ERD/ERS) in Mu (8-13 Hz) and Beta (13-30 Hz) bands over motor channels (C3, Cz, C4) during left/right-hand motor imagery tasks. Generated ERD/ERS time courses, power spectral density plots, ERP averages, and time-frequency representations. Running the script requires entering the subject number, session number, run number, and task in the same format as the data .xdf file.
