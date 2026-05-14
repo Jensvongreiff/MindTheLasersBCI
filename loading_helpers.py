@@ -18,6 +18,77 @@ def load_data(path: str):
 
     return X
 
+def get_epochs(
+    raw_data: mne.io.Raw,
+    markers: list,
+    tmin: float = 0.3,
+    tmax: float = 1.3,
+    baseline: tuple[float, float] | None = None,
+    event_dict: dict | None = None,
+) -> tuple[mne.Epochs, dict]:
+    """
+    Get the epochs from the raw data based on the markers.
+
+    Parameters
+    ----------
+    raw_data : mne.io.RawArray
+        Raw data object.
+    markers : list
+        List of markers.
+    tmin : float, optional
+        Start time of the time window (epoch). The default is 0.3.
+    tmax : float, optional
+        End time of the time window (epoch). The default is 1.3.
+    baseline : tuple, optional
+        Window used for baseline correction. The default is None.
+    event_dict : dict, optional
+        Dictionary of event IDs. The default is None.
+    Returns
+    -------
+    epochs : mne.Epochs
+        Epochs object.
+    filtered_events_id : dict
+        Dictionary of filtered events.
+
+    """
+    # Get the events based on the annotations (in our case the ARROW markers)
+    markers_dict = {marker: i for i, marker in enumerate(markers)}
+    if event_dict is not None:
+        events, events_id = mne.events_from_annotations(raw_data, event_id=event_dict, verbose=False)
+    else:
+        events, events_id = mne.events_from_annotations(raw_data, event_id=markers_dict, verbose=False)
+
+    # Get the events that are in the marker_IDs
+    filtered_events_id = {key: value for key, value in events_id.items() if "" in key}
+    tmin_ = None
+
+
+    # Adapt time window in case we need to do baseline correction
+    if baseline:
+        tmin_ = tmin
+        tmin = baseline[0]
+    else:
+        baseline = None
+
+    # Create epochs
+    epochs = mne.Epochs(
+        raw_data,
+        events=events,
+        tmin=tmin,
+        tmax=tmax,
+        event_id=filtered_events_id,
+        baseline=baseline,
+        preload=True,
+        verbose=False,
+        event_repeated='drop'
+    )
+
+    # Crop the epochs to the desired time window
+    if tmin_ is not None:
+        epochs.crop(tmin=tmin_, tmax=tmax)
+
+    return epochs, filtered_events_id
+
 
 def get_raw_offline(
     trial: Path, marker_durations: list[float] | None = None
