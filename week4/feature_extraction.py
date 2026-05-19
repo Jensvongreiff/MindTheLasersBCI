@@ -5,3 +5,7 @@
 
 # features[subject][method]["E"]["X"]  # session 2 features
 # features[subject][method]["E"]["y"]
+
+# Example: X_train = features["A01"]["CSP"]["T"]["X"]
+
+
