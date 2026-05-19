@@ -9,7 +9,7 @@ from mne.time_frequency import tfr_multitaper
 from scipy.stats import ttest_ind, wilcoxon
 
 sys.path.append(str(Path.cwd().parent))
-from loading_helpers import get_epochs, get_raw_offline
+from week3.loading_helpers import get_epochs, get_raw_offline
 
 mne.set_log_level("WARNING")
 

@@ -3,7 +3,7 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.signal as sig
-from loading_helpers import load_one_channel_data
+from week3.loading_helpers import load_one_channel_data
 import mne
 
 # Function to apply causal 4th order IIR filter (for online MI)

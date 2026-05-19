@@ -1,4 +1,4 @@
-from mi_evaluate_plots import (
+from week3.mi_evaluate_plots import (
     build_paths,
     get_epochs,
     get_hilbert_envelope,
@@ -11,7 +11,7 @@ from mi_evaluate_plots import (
 )
 import mne
 from mne.preprocessing import ICA
-from filtering_A1 import apply_causal_filter_iir
+from week3.filtering_A1 import apply_causal_filter_iir
 from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt

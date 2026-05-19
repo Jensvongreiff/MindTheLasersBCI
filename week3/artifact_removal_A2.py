@@ -6,7 +6,7 @@ from pathlib import Path
 import mne
 from mne.preprocessing import ICA
 
-from loading_helpers import get_raw_offline
+from week3.loading_helpers import get_raw_offline
 
 def use_ASR():
     pass
