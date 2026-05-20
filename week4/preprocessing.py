@@ -1,9 +1,18 @@
 
 import numpy as np
+import copy
 import scipy.signal as sig
 import mne
 from mne.preprocessing import ICA
 
+BCI2A_CHANNEL_NAMES = [
+    "Fz",
+    "FC3", "FC1", "FCz", "FC2", "FC4",
+    "C5", "C3", "C1", "Cz", "C2", "C4", "C6",
+    "CP3", "CP1", "CPz", "CP2", "CP4",
+    "P1", "Pz", "P2",
+    "POz",
+]
 
 def filter_causal_iir_epochs(
     X: np.ndarray,
@@ -226,3 +235,103 @@ def preprocess_epochs(
         preprocessing_info["epochs_ica"] = epochs_ica
 
     return X_proc, preprocessing_info
+
+def preprocess_bci2a_dataset(
+    dataset: dict,
+    ch_names=None,
+    apply_filter: bool = True,
+    apply_ica: bool = True,
+    iir_order: int = 4,
+    iir_band: list = [8, 30],
+    ica_components: int = 20,
+    ica_exclude=None,
+):
+    """
+    Apply preprocess_epochs() to every subject/session in a loaded BCI2a dataset.
+
+    Parameters
+    ----------
+    dataset : dict
+        Output of load_bci2a_dataset(...).
+
+    ch_names : list or None
+        Channel names passed to preprocess_epochs.
+        If None, defaults to standard BCI2a 22-channel names.
+
+    apply_filter : bool
+        Passed to preprocess_epochs.
+
+    apply_ica : bool
+        Passed to preprocess_epochs.
+
+    iir_order : int
+        Passed to preprocess_epochs.
+
+    iir_band : list
+        Passed to preprocess_epochs.
+
+    ica_components : int
+        Passed to preprocess_epochs.
+
+    ica_exclude : list or None
+        Passed to preprocess_epochs.
+
+    Returns
+    -------
+    preprocessed_dataset : dict
+        Same structure as original dataset, but with preprocessed X.
+
+    preprocessing_infos : dict
+        Matching nested dictionary containing preprocessing info per subject/session.
+        Example:
+        preprocessing_infos["A01"]["T"]
+    """
+
+    if ch_names is None:
+        ch_names = BCI2A_CHANNEL_NAMES
+
+    preprocessed_dataset = {}
+    preprocessing_infos = {}
+
+    for subject_id, subject_data in dataset.items():
+        preprocessed_dataset[subject_id] = {}
+        preprocessing_infos[subject_id] = {}
+
+        for session, session_data in subject_data.items():
+            X = session_data["X"]
+            y = session_data["y"]
+            fs = session_data["fs"]
+            info = session_data["info"]
+
+            n_channels = X.shape[1]
+            session_ch_names = ch_names[:n_channels]
+
+            X_preprocessed, preprocessing_info = preprocess_epochs(
+                X=X,
+                fs=fs,
+                ch_names=session_ch_names,
+                apply_filter=apply_filter,
+                apply_ica=apply_ica,
+                iir_order=iir_order,
+                iir_band=iir_band,
+                ica_components=min(ica_components, n_channels),
+                ica_exclude=ica_exclude,
+            )
+
+            # Keep the exact same dataset structure
+            preprocessed_dataset[subject_id][session] = {
+                "X": X_preprocessed,
+                "y": y.copy() if isinstance(y, np.ndarray) else copy.deepcopy(y),
+                "fs": fs,
+                "info": copy.deepcopy(info),
+            }
+
+            # Store preprocessing info separately so the dataset structure stays clean
+            preprocessing_infos[subject_id][session] = preprocessing_info
+
+            print(
+                f"{subject_id}{session}: "
+                f"X {X.shape} -> {X_preprocessed.shape}"
+            )
+
+    return preprocessed_dataset, preprocessing_infos

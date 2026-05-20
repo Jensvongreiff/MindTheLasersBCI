@@ -28,6 +28,17 @@ uv sync
 
 ```
 
+### Running files for assignments
+This is the most reliable way to run files in the current project format:
+```bash
+# Run the respective files in this form
+uv run python -m weekX.filename
+
+# Example
+uv run python -m week4.feature_extraction
+
+```
+
 ## Project Roadmap & Submissions
 
 This project is structured around iterative submissions, moving from theoretical foundations to online BCI deployment.
@@ -60,7 +71,11 @@ Analyzed Event-Related Desynchronization/Synchronization (ERD/ERS) in Mu (8-13 H
 
 ## Submission 3:
 
-tbd
+### Feature Extraction
+
+### Classification
+
+### Visualization
 
 ## Local Repository Structure
 

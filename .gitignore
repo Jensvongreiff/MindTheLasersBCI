@@ -5,3 +5,4 @@ data/
 plots/
 plots_MI/
 __pycache__/
+*.pkl

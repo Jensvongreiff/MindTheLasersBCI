@@ -3,24 +3,29 @@ import numpy as np
 import scipy.io as sio
 
 
-def get_bci2a_mat_path(data_dir, subject, session):
+def get_bci2a_mat_path(subject, session):
     """
     Construct path to BCI Competition IV 2a .mat file.
 
+    Implicitly uses data/bci2a_dataset/ directory structure.
+
     Examples
     --------
-    get_bci2a_mat_path("data", 1, "T") -> Path("data/A01T.mat")
-    get_bci2a_mat_path("data", 1, "E") -> Path("data/A01E.mat")
+    get_bci2a_mat_path(1, "T") -> Path("data/bci2a_dataset/A01T.mat")
+    get_bci2a_mat_path("A01", "T") -> Path("data/bci2a_dataset/A01T.mat")
     """
-    data_dir = Path(data_dir)
     session = session.upper()
 
     if session not in ["T", "E"]:
         raise ValueError("session must be 'T' or 'E'")
 
-    subject_id = f"A{int(subject):02d}{session}.mat"
+    # Handle both integer and string subject IDs
+    if isinstance(subject, str):
+        subject_id = f"{subject}{session}.mat"
+    else:
+        subject_id = f"A{int(subject):02d}{session}.mat"
 
-    return data_dir / subject_id
+    return Path("data/bci2a_dataset") / subject_id
 
 
 

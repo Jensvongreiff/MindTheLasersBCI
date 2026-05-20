@@ -16,5 +16,6 @@ dependencies = [
     "pyxdf>=1.17.0",
     "pyyaml>=6.0.3",
     "scikit-learn>=1.7.2",
+    "scipy>=1.13.0",
     "umap-learn>=0.5.9.post2",
 ]
