@@ -762,16 +762,20 @@ def output_features(plot: bool = False, output_dir: str = "features"):
 
     return features
 
+def load_features(features_path: str = "features/all_features.pkl"):
+    with open(features_path, "rb") as f:
+        features = pickle.load(f)
+    return features
+
 def main():
     # Extract and save features for all subjects and both sessions
     # Plotting can be enabled for visual validation, but it will slow down the process significantly.
     # You need to manually close the plots for each subject/session to continue.
     # To change which subjects, or tweak preprocessing, you can modify the output_features() function.
-    features = output_features(plot=False)
+    # features = output_features(plot=False)
 
     # For demonstration, load the saved features and print their shapes
-    with open("features/all_features.pkl", "rb") as f:
-        features = pickle.load(f)
+    features = load_features("features/all_features.pkl")
 
     subjects = [
         "A01", "A02", "A03", "A04", "A05",
