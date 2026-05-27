@@ -3,35 +3,28 @@ import time
 import json
 import numpy as np
 import pandas as pd
+from pathlib import Path
 import os
 
-from pathlib import Path
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2" # Suppress TF warnings if still installed
 
-# --- TURN OFF SOFT WARNINGS ---
-os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-
-import tensorflow as tf
+import torch
+import torch.nn as nn
+from torch.utils.data import TensorDataset, DataLoader
 
 from sklearn.metrics import (
     accuracy_score, f1_score, balanced_accuracy_score, 
     confusion_matrix, brier_score_loss
 )
 
-# Import previous weeks' tools
-from week4.feature_extraction import load_features
-from week4.classification import make_classifier
+# Import loading/preprocessing and our new PyTorch model
 from week4.loading import load_bci2a_dataset
 from week4.preprocessing import preprocess_bci2a_dataset
-
-# Import Deep Learning Model
-from week5.EEGModels import EEGNet
+from week5.models import EEGNet
 
 def expected_calibration_error(y_true, y_prob, n_bins=10):
-    """Computes the Expected Calibration Error (ECE) for binary classification."""
     bins = np.linspace(0., 1., n_bins + 1)
     binids = np.digitize(y_prob, bins) - 1
-    
     ece = 0.0
     for i in range(n_bins):
         mask = binids == i
@@ -42,80 +35,70 @@ def expected_calibration_error(y_true, y_prob, n_bins=10):
             ece += weight * np.abs(bin_acc - bin_conf)
     return ece
 
-def evaluate_single_seed(X_train, y_train, X_test, y_test, model_type, seed, acq_delay, meth_delay):
-    """Trains and evaluates a model for a single random seed."""
+def evaluate_single_seed(X_train, y_train, X_test, y_test, subject_id, seed, acq_delay, meth_delay):
+    """Trains and evaluates a PyTorch model for a single random seed."""
     np.random.seed(seed)
-    tf.random.set_seed(seed)
-    metrics = {"seed": seed}
+    torch.manual_seed(seed)
+    
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+    metrics = {
+        "seed": seed,
+        "subject": subject_id,
+        "device": str(device).upper()
+    }
+
+    # Reshape for PyTorch: (Batch, Channels, Height, Width) -> (Batch, 1, Channels, Timepoints)
+    X_train_t = torch.tensor(X_train, dtype=torch.float32).unsqueeze(1).to(device)
+    y_train_t = torch.tensor(y_train, dtype=torch.long).to(device)
+    X_test_t = torch.tensor(X_test, dtype=torch.float32).unsqueeze(1).to(device)
+    
+    # Initialize EEGNet dynamically
+    model = EEGNet(nb_classes=2, Chans=X_train.shape[1], Samples=X_train.shape[2]).to(device)
+    metrics["parameters"] = sum(p.numel() for p in model.parameters())
+    metrics["batch_size"] = 16
+    
+    criterion = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    
+    dataset = TensorDataset(X_train_t, y_train_t)
+    loader = DataLoader(dataset, batch_size=metrics["batch_size"], shuffle=True)
     
     # ---------------------------------------------------------
-    # 1. Model Setup & Device Logging (Generalization Pillar)
-    # ---------------------------------------------------------
-    if model_type in ["mdm", "lda", "csp"]:
-        model = make_classifier() # From week 4
-        metrics["device"] = "CPU"
-        metrics["parameters"] = "N/A (sklearn)"
-        metrics["batch_size"] = "Full Batch"
-        
-    elif model_type == "eegnet":
-        # Reshape for Keras: (Trials, Channels, Timepoints, 1)
-        X_train = X_train.reshape(X_train.shape[0], X_train.shape[1], X_train.shape[2], 1)
-        X_test = X_test.reshape(X_test.shape[0], X_test.shape[1], X_test.shape[2], 1)
-        
-        # Initialize EEGNet (Channels and Timepoints inferred dynamically)
-        model = EEGNet(nb_classes=2, Chans=X_train.shape[1], Samples=X_train.shape[2], 
-                       dropoutRate=0.5, kernLength=64, F1=8, D=2, F2=16)
-        
-        model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
-        
-        metrics["device"] = "GPU" if tf.config.list_physical_devices('GPU') else "CPU"
-        metrics["parameters"] = model.count_params()
-        metrics["batch_size"] = 16
-    else:
-        raise ValueError(f"Unsupported model type: {model_type}")
-    
-    # ---------------------------------------------------------
-    # 2. Efficiency Pillar (Latency & ITR)
+    # Training Loop (Efficiency Pillar)
     # ---------------------------------------------------------
     t0_train = time.perf_counter()
-    if model_type == "eegnet":
-        # Keras models need explicit epochs and batch constraints
-        model.fit(X_train, y_train, epochs=50, batch_size=metrics["batch_size"], verbose=0)
-    else:
-        model.fit(X_train, y_train)
+    model.train()
+    for epoch in range(50):
+        for batch_x, batch_y in loader:
+            optimizer.zero_grad()
+            outputs = model(batch_x)
+            loss = criterion(outputs, batch_y)
+            loss.backward()
+            optimizer.step()
     metrics["train_time_sec"] = time.perf_counter() - t0_train
     
+    # ---------------------------------------------------------
+    # Inference & Latency
+    # ---------------------------------------------------------
     t0_infer = time.perf_counter()
-    
-    # Prediction Routing (Keras vs. Sklearn)
-    if model_type == "eegnet":
-        y_prob_full = model.predict(X_test, verbose=0)
-        y_prob = y_prob_full[:, 1] # Probability of class 1 (Right Hand)
-        y_pred = np.argmax(y_prob_full, axis=1) # Convert to 0/1 labels
-    elif hasattr(model, "predict_proba"):
-        y_prob_full = model.predict_proba(X_test)
-        y_prob = y_prob_full[:, 1] 
-        y_pred = np.argmax(y_prob_full, axis=1)
-    else:
-        # Fallback for models strictly outputting classes without proba
-        y_pred = model.predict(X_test)
-        y_prob = y_pred.astype(float) 
-
+    model.eval()
+    with torch.no_grad():
+        outputs = model(X_test_t)
+        probs = torch.softmax(outputs, dim=1).cpu().numpy()
+        y_prob = probs[:, 1]
+        y_pred = np.argmax(probs, axis=1)
     metrics["inference_time_sec"] = time.perf_counter() - t0_infer
     
-    # --- The Complete Latency Report ---
+    # Latency Breakdown
     metrics["delay_acquisition_sec"] = acq_delay
     metrics["delay_methodological_sec"] = meth_delay
     metrics["delay_computational_sec"] = metrics["inference_time_sec"] / len(y_test)
-    metrics["delay_total_sec"] = (
-        metrics["delay_acquisition_sec"] + 
-        metrics["delay_methodological_sec"] + 
-        metrics["delay_computational_sec"]
-    )
+    metrics["delay_total_sec"] = (acq_delay + meth_delay + metrics["delay_computational_sec"])
     metrics["inference_time_per_trial_ms"] = metrics["delay_computational_sec"] * 1000
 
     # ---------------------------------------------------------
-    # 3. Accuracy Pillar
+    # Accuracy & Reliability Pillars
     # ---------------------------------------------------------
     metrics["accuracy"] = accuracy_score(y_test, y_pred)
     metrics["macro_f1"] = f1_score(y_test, y_pred, average="macro")
@@ -125,9 +108,6 @@ def evaluate_single_seed(X_train, y_train, X_test, y_test, model_type, seed, acq
     metrics["cm_00"], metrics["cm_01"] = cm[0, 0], cm[0, 1]
     metrics["cm_10"], metrics["cm_11"] = cm[1, 0], cm[1, 1]
 
-    # ---------------------------------------------------------
-    # 4. Reliability Pillar
-    # ---------------------------------------------------------
     metrics["brier_score"] = brier_score_loss(y_test, y_prob)
     metrics["ece"] = expected_calibration_error(y_test, y_prob)
     
@@ -136,124 +116,81 @@ def evaluate_single_seed(X_train, y_train, X_test, y_test, model_type, seed, acq
     return metrics, prob_data
 
 def main():
-    parser = argparse.ArgumentParser(description="BCI 4-Pillar Evaluation Framework")
-    parser.add_argument("--model", type=str, default="lda", help="Model type: lda, mdm, eegnet")
-    parser.add_argument("--weights", type=str, default=None, help="Path to pre-trained weights")
-    parser.add_argument("--data", type=str, default="features/all_features.pkl", help="Path to feature dictionary")
+    parser = argparse.ArgumentParser(description="BCI 9-Subject Evaluation Framework")
     parser.add_argument("--protocol", type=str, default="cross-session", choices=["baseline", "noisy", "cross-session", "cross-subject"])
-    parser.add_argument("--seeds", type=int, nargs="+", default=[42, 97, 123], help="List of random seeds")
-    parser.add_argument("--out", type=str, default="week5/results", help="Output directory")
-    
-    # Latency Arguments
-    parser.add_argument("--acq_delay", type=float, default=4.0, help="Acquisition delay in seconds")
-    parser.add_argument("--meth_delay", type=float, default=0.0, help="Methodological delay in seconds")
-    
+    parser.add_argument("--seeds", type=int, nargs="+", default=[42, 97, 123])
+    parser.add_argument("--out", type=str, default="week5/results")
+    parser.add_argument("--acq_delay", type=float, default=4.0)
+    parser.add_argument("--meth_delay", type=float, default=0.0)
     args = parser.parse_args()
 
-    out_dir = Path(args.out)
+    out_dir = Path(args.out) / args.protocol
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # ---------------------------------------------------------
-    # Data Loading (Dynamic routing for EEGNet vs Baseline)
-    # ---------------------------------------------------------
-    if args.model == "eegnet":
-        print("Loading raw 3D EEG epochs for Deep Learning...")
-        # Note: adjust this path if your dataset lives somewhere else
-        raw_dataset = load_bci2a_dataset("data/bci2a_dataset")
-        data_source, _ = preprocess_bci2a_dataset(raw_dataset, apply_filter=True, apply_ica=False)
-    else:
-        print(f"Loading extracted features from {args.data}...")
-        data_source = load_features(args.data)
-        
-    method = "csp" # Target feature type if baseline model is chosen
+    print("\n[+] Initializing Data Cache (ICA = True). This will take a moment...")
+    raw_dataset = load_bci2a_dataset("data/bci2a_dataset")
+    data_cache, _ = preprocess_bci2a_dataset(raw_dataset, apply_filter=True, apply_ica=True)
+    print("[+] All 9 Subjects Loaded and Cleaned.\n")
 
-    def get_data(sub, session):
-        """Helper function to fetch data correctly regardless of model type."""
-        if args.model == "eegnet":
-            X = data_source[sub][session]["X"]
-            y = data_source[sub][session]["y"]
-        else:
-            X = data_source[sub][method][session]["X"]
-            y = data_source[sub][method][session]["y"]
-        
-        # Ensure labels are 0-indexed (0 and 1)
-        y = y - np.min(y)
-        return X, y
-
-    # ---------------------------------------------------------
-    # The 4 Evaluation Conditions (Assignment 2)
-    # ---------------------------------------------------------
-    print(f"\nSetting up protocol: {args.protocol.upper()}")
-    
-    if args.protocol == "baseline":
-        X_full, y_full = get_data("A01", "T")
-        split = int(0.8 * len(X_full))
-        X_train, y_train = X_full[:split], y_full[:split]
-        X_test, y_test = X_full[split:], y_full[split:]
-
-    elif args.protocol == "noisy":
-        X_full, y_full = get_data("A01", "T")
-        split = int(0.8 * len(X_full))
-        X_train, y_train = X_full[:split], y_full[:split]
-        
-        # Add artificial Gaussian noise to the test set
-        noise = np.random.normal(0, 0.5, X_full[split:].shape)
-        X_test = X_full[split:] + noise
-        y_test = y_full[split:]
-
-    elif args.protocol == "cross-session":
-        X_train, y_train = get_data("A01", "T")
-        X_test, y_test = get_data("A01", "E")
-
-    elif args.protocol == "cross-subject":
-        # Train A01, A02, A03 -> Test A04
-        X_train_list, y_train_list = [], []
-        for sub in ["A01", "A02", "A03"]:
-            X_sub, y_sub = get_data(sub, "T")
-            X_train_list.append(X_sub)
-            y_train_list.append(y_sub)
-            
-        X_train = np.vstack(X_train_list)
-        y_train = np.concatenate(y_train_list)
-        
-        X_test, y_test = get_data("A04", "T")
-        
-    else:
-        raise ValueError("Invalid protocol provided.")
-
-    # ---------------------------------------------------------
-    # Execution Loop
-    # ---------------------------------------------------------
+    subjects = [f"A{i:02d}" for i in range(1, 10)]
     all_metrics = []
     all_probs = {}
 
-    print(f"Evaluating {args.model.upper()} across {len(args.seeds)} seeds...")
-    for seed in args.seeds:
-        print(f"  Running seed {seed}...")
-        metrics, prob_data = evaluate_single_seed(
-            X_train, y_train, X_test, y_test, 
-            args.model, seed, args.acq_delay, args.meth_delay
-        )
-        all_metrics.append(metrics)
-        all_probs[f"seed_{seed}"] = prob_data
-
-    # Aggregate and Compute Mean/Std
-    df = pd.DataFrame(all_metrics)
+    print(f"Executing Protocol: {args.protocol.upper()}")
     
-    numeric_cols = df.select_dtypes(include=[np.number]).columns.drop("seed")
-    summary_df = df[numeric_cols].agg(['mean', 'std']).T
-    summary_df["formatted"] = summary_df.apply(lambda row: f"{row['mean']:.4f} ± {row['std']:.4f}", axis=1)
+    # ---------------------------------------------------------
+    # The Evaluation Engine (Loops through all 9 Subjects)
+    # ---------------------------------------------------------
+    for seed in args.seeds:
+        print(f"\n--- Random Seed: {seed} ---")
+        
+        for target_sub in subjects:
+            print(f"  Evaluating Test Subject: {target_sub}...")
+            
+            # --- Dynamic Data Routing ---
+            if args.protocol == "baseline":
+                X_full, y_full = data_cache[target_sub]["T"]["X"], data_cache[target_sub]["T"]["y"]
+                split = int(0.8 * len(X_full))
+                X_train, y_train = X_full[:split], y_full[:split]
+                X_test, y_test = X_full[split:], y_full[split:]
+                
+            elif args.protocol == "noisy":
+                X_full, y_full = data_cache[target_sub]["T"]["X"], data_cache[target_sub]["T"]["y"]
+                split = int(0.8 * len(X_full))
+                X_train, y_train = X_full[:split], y_full[:split]
+                noise = np.random.normal(0, 0.5, X_full[split:].shape)
+                X_test = X_full[split:] + noise
+                y_test = y_full[split:]
+                
+            elif args.protocol == "cross-session":
+                X_train, y_train = data_cache[target_sub]["T"]["X"], data_cache[target_sub]["T"]["y"]
+                X_test, y_test = data_cache[target_sub]["E"]["X"], data_cache[target_sub]["E"]["y"]
+                
+            elif args.protocol == "cross-subject":
+                # Leave-One-Subject-Out Loop
+                train_subs = [s for s in subjects if s != target_sub]
+                X_train = np.vstack([data_cache[s]["T"]["X"] for s in train_subs])
+                y_train = np.concatenate([data_cache[s]["T"]["y"] for s in train_subs])
+                X_test, y_test = data_cache[target_sub]["T"]["X"], data_cache[target_sub]["T"]["y"]
 
-    print("\n--- Final 4-Pillar Summary ---")
-    print(summary_df["formatted"])
+            # Ensure 0-indexing for PyTorch Loss
+            y_train = y_train - np.min(y_train)
+            y_test = y_test - np.min(y_test)
+
+            metrics, prob_data = evaluate_single_seed(
+                X_train, y_train, X_test, y_test, 
+                target_sub, seed, args.acq_delay, args.meth_delay
+            )
+            all_metrics.append(metrics)
+            all_probs[f"{target_sub}_seed_{seed}"] = prob_data
 
     # Save to disk
+    df = pd.DataFrame(all_metrics)
     df.to_csv(out_dir / "metrics_per_seed.csv", index=False)
-    summary_df.to_csv(out_dir / "metrics_summary.csv")
     with open(out_dir / "prob_data.json", "w") as f:
         json.dump(all_probs, f)
         
-    print(f"\nOutputs saved to {out_dir}/")
+    print(f"\n[+] Saved {len(df)} evaluation rows to {out_dir}/")
 
 if __name__ == "__main__":
     main()
