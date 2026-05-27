@@ -19,5 +19,6 @@ dependencies = [
     "scipy>=1.13.0",
     "umap-learn>=0.5.9.post2",
     "pyqt5>=5.15.11",
-    "pyqt5-qt5<5.15.11"
+    "pyqt5-qt5<5.15.11",
+    "tensorflow>=2.21.0",
 ]
