@@ -105,7 +105,7 @@ class PyTorchClassifier:
     def load_weights(self, path, X_sample):
         """Instantiates the architecture and loads pre-trained weights from a .pt file."""
         Chans, Samples = X_sample.shape[1], X_sample.shape[2]
-        self.model = self.model_class(Chans=Chans, Samples=Samples, **self.kwargs).to(self.device)
+        self.model = self.model_class(Chans=Chans, Samples=Samples, **self.kwargs).to(self.device) # type: ignore
         self.model.load_state_dict(torch.load(path, map_location=self.device, weights_only=True))
         self.model.eval()
 
