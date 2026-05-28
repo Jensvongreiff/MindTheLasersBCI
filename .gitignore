@@ -2,6 +2,7 @@
 uv.lock
 *.xdf
 data/
+week5/results/
 plots/
 plots_MI/
 __pycache__/

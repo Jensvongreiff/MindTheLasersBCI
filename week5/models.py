@@ -3,6 +3,8 @@ import torch
 import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader
 
+from week5.data_augmentation import mixup_batch, mixup_criterion
+
 class EEGNet(nn.Module):
     """
     Native PyTorch Implementation of EEGNet (Lawhern et al., 2018).
@@ -52,36 +54,52 @@ class PyTorchClassifier:
     Scikit-Learn style wrapper for PyTorch Models.
     Allows for training (.fit), evaluating (.predict_proba), and loading pre-trained weights.
     """
-    def __init__(self, model_class, epochs=50, batch_size=16, lr=1e-3, **kwargs):
+    def __init__(self, model_class, epochs=50, batch_size=16, lr=1e-3, mixup=False):
         self.model_class = model_class
         self.epochs = epochs
         self.batch_size = batch_size
         self.lr = lr
-        self.kwargs = kwargs
+        self.mixup = mixup # NEW: Store the mixup flag
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = None
 
     def fit(self, X, y):
-        Chans, Samples = X.shape[1], X.shape[2]
-        self.model = self.model_class(Chans=Chans, Samples=Samples, **self.kwargs).to(self.device)
-        
-        criterion = nn.CrossEntropyLoss()
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
-        
+        # Convert numpy arrays to PyTorch tensors
         X_t = torch.tensor(X, dtype=torch.float32).unsqueeze(1).to(self.device)
         y_t = torch.tensor(y, dtype=torch.long).to(self.device)
+        
+        # Initialize model and optimizer
+        self.model = self.model_class(nb_classes=2, Chans=X.shape[1], Samples=X.shape[2]).to(self.device)
+        criterion = nn.CrossEntropyLoss()
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
         
         dataset = TensorDataset(X_t, y_t)
         loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
         
         self.model.train()
-        for epoch in range(self.epochs):
-            for batch_x, batch_y in loader:
-                optimizer.zero_grad()
-                outputs = self.model(batch_x)
-                loss = criterion(outputs, batch_y)
-                loss.backward()
-                optimizer.step()
+        
+        # --- Training Loop Branching ---
+        if self.mixup:
+            print("    [Mixup] Applying Feature-Space Mixup (alpha=0.2) during training.")
+            for epoch in range(self.epochs):
+                for batch_x, batch_y in loader:
+                    optimizer.zero_grad()
+                    # Colleague's Mixup Logic
+                    batch_x, y_a, y_b, lam = mixup_batch(batch_x, batch_y, alpha=0.2)
+                    outputs = self.model(batch_x)
+                    loss = mixup_criterion(criterion, outputs, y_a, y_b, lam)
+                    loss.backward()
+                    optimizer.step()
+        else:
+            # Standard Training Loop
+            for epoch in range(self.epochs):
+                for batch_x, batch_y in loader:
+                    optimizer.zero_grad()
+                    outputs = self.model(batch_x)
+                    loss = criterion(outputs, batch_y)
+                    loss.backward()
+                    optimizer.step()
+        
         return self
 
     def load_weights(self, path, X_sample):

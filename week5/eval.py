@@ -16,10 +16,12 @@ from sklearn.metrics import (
 from week4.loading import load_bci2a_dataset
 from week4.preprocessing import preprocess_bci2a_dataset
 
+from week5.data_augmentation import augment_eeg_training_data
+
 # ==========================================
 # 1. THE MODEL DISPATCHER
 # ==========================================
-def get_model(model_name):
+def get_model(model_name, mixup=False):
     if model_name.lower() == "lda":
         from pyriemann.estimation import Covariances
         from pyriemann.spatialfilters import CSP
@@ -28,7 +30,8 @@ def get_model(model_name):
         return make_pipeline(Covariances('oas'), CSP(4, log=True), LinearDiscriminantAnalysis())
     elif model_name.lower() == "eegnet":
         from week5.models import EEGNet, PyTorchClassifier
-        return PyTorchClassifier(EEGNet, epochs=50, batch_size=16, lr=1e-3)
+        # --- NEW: Pass mixup flag down to the wrapper ---
+        return PyTorchClassifier(EEGNet, epochs=50, batch_size=16, lr=1e-3, mixup=mixup)
     elif model_name.lower() == "fbcnet":
         raise NotImplementedError("FBCNet is not yet implemented.")
     else:
@@ -65,6 +68,10 @@ def main():
     # Hidden args for latency calculation logic
     parser.add_argument("--acq_delay", type=float, default=4.0)
     parser.add_argument("--meth_delay", type=float, default=0.0) 
+    
+    # --- Augmentation Flags ---
+    parser.add_argument("--input_augment", action="store_true", help="Apply input-space data augmentation before training")
+    parser.add_argument("--mixup_augment", action="store_true", help="Apply Mixup feature-space augmentation during training")
     args = parser.parse_args()
 
     internal_protocol = "cross-subject" if args.protocol.lower() == "loso" else args.protocol.lower()
@@ -76,7 +83,7 @@ def main():
 
     print(f"\n[+] Loading Data from '{args.data}' (ICA=True). Please wait...")
     raw_dataset = load_bci2a_dataset(args.data)
-    data_cache, _ = preprocess_bci2a_dataset(raw_dataset, apply_filter=True, apply_ica=True)
+    data_cache, _ = preprocess_bci2a_dataset(raw_dataset, apply_filter=True, apply_ica=False)
 
     subjects = [f"A{i:02d}" for i in range(1, 10)]
     all_metrics = []
@@ -116,8 +123,16 @@ def main():
             y_train = y_train - np.min(y_train)
             y_test = y_test - np.min(y_test)
 
+            # --- Input-Space Augmentation Routing ---
+            if args.input_augment and not args.weights:
+                original_len = len(X_train)
+                X_train, y_train = augment_eeg_training_data(
+                    X_train, y_train, noise_std=0.05, scale_std=0.1, augment_factor=1, seed=seed
+                )
+                print(f"    [Augmentation] {target_sub}: Expanded training set from {original_len} to {len(X_train)} trials.")
+
             # --- Instantiation & Pre-trained Bypass ---
-            model = get_model(args.model)
+            model = get_model(args.model, mixup=args.mixup_augment)
             t0_train = time.perf_counter()
             
             if args.weights:
@@ -158,6 +173,10 @@ def main():
                 "model": args.model.upper(),
                 "device": device_str,
                 
+                # --- Track Augmentations in the CSV ---
+                "input_augment": args.input_augment,
+                "mixup_augment": args.mixup_augment,
+
                 # Device Settings
                 "parameters": params_str if params_str != "N/A" else 0,
                 "batch_size": batch_str if batch_str != "N/A" else 0,
