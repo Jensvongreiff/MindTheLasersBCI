@@ -33,7 +33,7 @@ Additionally for pytorch CUDA GPU usage:
 nvcc --version
 #driver version
 nvidia-smi
-#if cuda and driver are available and which pytorch cuda wheel you need to install
+#if cuda and driver are available, check which pytorch cuda wheel you need to install. cu132 is preinstalled.
 ```
 
 Replace the url of torch in pyproject toml with the device-specific pytorch cuda url from https://pytorch.org/get-started/locally/
