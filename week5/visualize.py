@@ -126,6 +126,7 @@ def main():
     parser.add_argument("--dir", type=str, default="week5/results")
     parser.add_argument("--model", type=str, default="EEGNet")
     parser.add_argument("--protocols", type=str, default="all")
+    parser.add_argument("--run", type=str, default="latest") # NEW: Strict run locking
     args = parser.parse_args()
 
     root_dir = Path(args.dir)
@@ -134,12 +135,33 @@ def main():
     else:
         target_protocols = [p.strip() for p in args.protocols.split(",")]
 
+    # --- 1. STRICT RUN CONSISTENCY CHECK ---
+    target_run_name = args.run
+    if target_run_name.lower() == "latest":
+        all_valid_runs = []
+        for p in target_protocols:
+            p_dir = root_dir / p
+            if p_dir.exists():
+                all_valid_runs.extend([d for d in p_dir.iterdir() if d.is_dir() and (d / "metrics_per_seed.csv").exists()])
+        
+        if not all_valid_runs:
+            print("[-] Error: No valid run folders found anywhere.")
+            return
+        
+        # Find the absolute newest folder and lock in its name globally
+        newest_run_dir = max(all_valid_runs, key=lambda d: d.stat().st_mtime)
+        target_run_name = newest_run_dir.name
+        print(f"[*] Auto-detected latest run: '{target_run_name}'. Enforcing across all protocols to prevent mixing!")
+
     metrics_tracker = {}
 
+    # --- 2. GENERATE DASHBOARDS ---
     for protocol in target_protocols:
-        res_path = root_dir / protocol / "runcudatest"
-        if not res_path.exists():
-            print(f"[-] Warning: Directory {res_path} not found. Skipping...")
+        res_path = root_dir / protocol / target_run_name
+        
+        # If the locked run name is missing for a protocol, it safely skips it instead of mixing older runs
+        if not res_path.exists() or not (res_path / "metrics_per_seed.csv").exists():
+            print(f"[-] Warning: Run '{target_run_name}' is missing for {protocol.upper()}. Skipping...")
             continue
             
         print(f"[*] Extracting Dashboards for: {protocol.upper()}...")
@@ -154,7 +176,7 @@ def main():
         mean_ece = df['ece'].mean()
         plot_reliability_pillar(prob_data, mean_ece, args.model, protocol, res_path / "reliability_pillar.png")
         
-        # Track for Master Degradation Slide (Calculate Subject Means, then find the Min)
+        # Track for Master Degradation Slide
         subject_means = df.groupby('subject')['accuracy'].mean()
         metrics_tracker[protocol.title()] = {
             "Mean": subject_means.mean(),
@@ -162,7 +184,8 @@ def main():
         }
         
     if len(metrics_tracker) > 1 and (args.protocols.lower() == "all" or len(target_protocols) > 1):
-        plot_master_degradation(metrics_tracker, args.model, root_dir / "master_degradation_summary.png")
+        # Dynamically append the run name to the master summary output path
+        plot_master_degradation(metrics_tracker, args.model, root_dir / f"master_degradation_summary_{target_run_name}.png")
 
 if __name__ == "__main__":
     main()
