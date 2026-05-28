@@ -124,7 +124,7 @@ def plot_master_degradation(metrics_tracker, model_name, out_path):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dir", type=str, default="week5/results")
-    parser.add_argument("--model", type=str, default="EEGNet (PyTorch)")
+    parser.add_argument("--model", type=str, default="EEGNet")
     parser.add_argument("--protocols", type=str, default="all")
     args = parser.parse_args()
 
@@ -137,7 +137,7 @@ def main():
     metrics_tracker = {}
 
     for protocol in target_protocols:
-        res_path = root_dir / protocol
+        res_path = root_dir / protocol / "runcudatest"
         if not res_path.exists():
             print(f"[-] Warning: Directory {res_path} not found. Skipping...")
             continue
