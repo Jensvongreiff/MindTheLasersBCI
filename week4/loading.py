@@ -175,7 +175,64 @@ def load_bci2a_left_right(
 
     return X, y, fs, info
 
+def load_bci2a_multiclass(
+    mat_path,
+    tmin=0.0,
+    tmax=4.0,
+    keep_eeg_channels_only=True,
+    reject_artifacts=False,
+):
+    """Loads all 4 classes from the BCI 2a dataset."""
+    mat_path = Path(mat_path)
+    import scipy.io as sio # Ensure this is imported
+    mat = sio.loadmat(mat_path, squeeze_me=True, struct_as_record=False)
+    runs = np.ravel(mat["data"])
+    fs = int(runs[0].fs)
 
+    start_offset = int(round(tmin * fs))
+    stop_offset = int(round(tmax * fs))
+    n_times = stop_offset - start_offset
+
+    X_epochs, y_epochs, run_ids, artifact_flags = [], [], [], []
+
+    for run_idx, run in enumerate(runs):
+        trial_positions = np.asarray(run.trial, dtype=int).ravel()
+        labels = np.asarray(run.y, dtype=int).ravel()
+        if len(trial_positions) == 0: continue
+
+        X_run = np.asarray(run.X, dtype=float).T
+        if keep_eeg_channels_only: X_run = X_run[:22, :]
+        n_channels, n_samples = X_run.shape
+        artifacts = np.asarray(run.artifacts).astype(bool).ravel()
+        if trial_positions.min() == 1: trial_positions = trial_positions - 1
+
+        for trial_start, label, is_artifact in zip(trial_positions, labels, artifacts):
+            # Keep all 4 classes
+            if label not in [1, 2, 3, 4]: continue
+            if reject_artifacts and is_artifact: continue
+
+            start = trial_start + start_offset
+            stop = trial_start + stop_offset
+            if start < 0 or stop > n_samples: continue
+
+            epoch = X_run[:, start:stop]
+            if epoch.shape != (n_channels, n_times): continue
+
+            X_epochs.append(epoch)
+            # Map 1-4 directly to 0-3
+            y_epochs.append(int(label - 1))
+            run_ids.append(run_idx)
+            artifact_flags.append(bool(is_artifact))
+
+    X = np.stack(X_epochs, axis=0)
+    y = np.asarray(y_epochs, dtype=int)
+    info = {
+        "file": str(mat_path), "fs": fs, "tmin": tmin, "tmax": tmax,
+        "n_trials": len(y), "n_channels": X.shape[1], "n_times": X.shape[2],
+        "class_mapping": {0: "left hand", 1: "right hand", 2: "feet", 3: "tongue"},
+        "run_ids": np.asarray(run_ids), "artifact_flags": np.asarray(artifact_flags),
+    }
+    return X, y, fs, info
 
 def load_bci2a_dataset(
     data_dir,
@@ -184,6 +241,7 @@ def load_bci2a_dataset(
     tmax=4.0,
     keep_eeg_channels_only=True,
     reject_artifacts=False,
+    classes=2,
 ):
     """
     Load BCI Competition IV Dataset 2a for all subjects.
@@ -217,13 +275,22 @@ def load_bci2a_dataset(
             if not mat_path.exists():
                 raise FileNotFoundError(f"Could not find file: {mat_path}")
 
-            X, y, fs, info = load_bci2a_left_right(
-                mat_path,
-                tmin=tmin,
-                tmax=tmax,
-                keep_eeg_channels_only=keep_eeg_channels_only,
-                reject_artifacts=reject_artifacts,
-            )
+            if classes == 2:
+                X, y, fs, info = load_bci2a_left_right(
+                    mat_path,
+                    tmin=tmin,
+                    tmax=tmax,
+                    keep_eeg_channels_only=keep_eeg_channels_only,
+                    reject_artifacts=reject_artifacts,
+                )
+            else:
+                X, y, fs, info = load_bci2a_multiclass(
+                    mat_path,
+                    tmin=tmin,
+                    tmax=tmax,
+                    keep_eeg_channels_only=keep_eeg_channels_only,
+                    reject_artifacts=reject_artifacts,
+                )
 
             dataset[subject_id][session] = {
                 "X": X,

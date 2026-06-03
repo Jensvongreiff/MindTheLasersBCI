@@ -39,22 +39,54 @@ def plot_efficiency_pillar(df, model_name, protocol_name, out_path):
     plt.close()
 
 def plot_confusion_matrix(df, model_name, protocol_name, out_path):
+    # 1. Detect how many classes exist by checking the dataframe columns
+    cm_cols = [c for c in df.columns if c.startswith('cm_')]
+    if not cm_cols:
+        print("[-] No confusion matrix data found in CSV.")
+        return
+        
+    # Find the maximum index (e.g., cm_33 means 4 classes)
+    n_classes = max([int(c.split('_')[1][0]) for c in cm_cols]) + 1
+    
+    # 2. Reconstruct the aggregated confusion matrix (Sum across all subjects/seeds)
+    cm = np.zeros((n_classes, n_classes), dtype=int)
+    for i in range(n_classes):
+        for j in range(n_classes):
+            col_name = f"cm_{i}{j}"
+            if col_name in df.columns:
+                cm[i, j] = int(df[col_name].sum())
+    
+    # 3. Define Labels dynamically
+    if n_classes == 2:
+        labels = ["Left Hand", "Right Hand"]
+    elif n_classes == 4:
+        labels = ["Left Hand", "Right Hand", "Feet", "Tongue"]
+    else:
+        labels = [f"Class {i}" for i in range(n_classes)]
+        
+    # 4. Plot using Seaborn
     fig, ax = plt.subplots(figsize=(8, 6))
-    fig.suptitle(f"Bias & Errors | Model: {model_name} | Protocol: {protocol_name.title()}", fontsize=14, fontweight="bold")
     
-    avg_cm = np.array([
-        [df["cm_00"].mean(), df["cm_01"].mean()],
-        [df["cm_10"].mean(), df["cm_11"].mean()]
-    ])
-    row_sums = avg_cm.sum(axis=1, keepdims=True)
-    avg_cm_norm = avg_cm / row_sums
+    # Calculate percentages for annotations
+    cm_percentages = cm / cm.sum()
+    annot_data = np.empty_like(cm, dtype=object)
+    for i in range(n_classes):
+        for j in range(n_classes):
+            annot_data[i, j] = f"{cm[i, j]}\n({cm_percentages[i, j]:.1%})"
+
+    sns.heatmap(cm, annot=annot_data, fmt='', cmap='Blues', 
+                xticklabels=labels, yticklabels=labels, ax=ax,
+                annot_kws={"size": 11})
     
-    sns.heatmap(avg_cm_norm, annot=True, fmt=".1%", cmap="Blues", 
-                xticklabels=["Left", "Right"], yticklabels=["Left", "Right"], ax=ax)
-                
-    ax.set_title("Average Row-Normalized Confusion Matrix (9 Subjects)", fontsize=12)
-    ax.set_xlabel("Predicted Label")
-    ax.set_ylabel("True Label")
+    # 5. Styling
+    ax.set_title(f"Aggregated Confusion Matrix | Model: {model_name}\nProtocol: {protocol_name.title()}", 
+                 fontsize=14, fontweight="bold", pad=15)
+    ax.set_xlabel("Predicted Label", fontsize=12, fontweight="bold", labelpad=10)
+    ax.set_ylabel("True Label", fontsize=12, fontweight="bold", labelpad=10)
+    
+    # Rotate the x-axis labels so "Right Hand" doesn't overlap "Feet"
+    plt.xticks(rotation=45, ha="right")
+    plt.yticks(rotation=0)
     
     plt.tight_layout()
     plt.savefig(out_path, dpi=200)

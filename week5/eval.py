@@ -72,6 +72,8 @@ def main():
     # --- Augmentation Flags ---
     parser.add_argument("--input_augment", action="store_true", help="Apply input-space data augmentation before training")
     parser.add_argument("--mixup_augment", action="store_true", help="Apply Mixup feature-space augmentation during training")
+    parser.add_argument("--ICA", action="store_true", help="Apply ICA for data preprocessing")
+    parser.add_argument("--classes", type=int, default=2, choices=[2, 4], help="Classify 2 (Left/Right) or 4 (All) motor tasks.")
     args = parser.parse_args()
 
     internal_protocol = "cross-subject" if args.protocol.lower() == "loso" else args.protocol.lower()
@@ -81,9 +83,9 @@ def main():
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"\n[+] Loading Data from '{args.data}' (ICA=True). Please wait...")
-    raw_dataset = load_bci2a_dataset(args.data)
-    data_cache, _ = preprocess_bci2a_dataset(raw_dataset, apply_filter=True, apply_ica=False)
+    print(f"\n[+] Loading Data from '{args.data}' (ICA={args.ICA}). Please wait...")
+    raw_dataset = load_bci2a_dataset(args.data, classes=args.classes)
+    data_cache, _ = preprocess_bci2a_dataset(raw_dataset, apply_filter=True, apply_ica=args.ICA)
 
     subjects = [f"A{i:02d}" for i in range(1, 10)]
     all_metrics = []
@@ -120,6 +122,15 @@ def main():
             else:
                 raise ValueError(f"Unknown Protocol: {internal_protocol}")
 
+            # Dynamic Class Filtering
+            if args.classes == 2:
+                # Mask out classes 2 (Feet) and 3 (Tongue)
+                train_mask = (y_train == 0) | (y_train == 1)
+                test_mask = (y_test == 0) | (y_test == 1)
+                
+                X_train, y_train = X_train[train_mask], y_train[train_mask]
+                X_test, y_test = X_test[test_mask], y_test[test_mask]
+            
             y_train = y_train - np.min(y_train)
             y_test = y_test - np.min(y_test)
 
@@ -150,8 +161,26 @@ def main():
             probs = model.predict_proba(X_test)
             infer_time = time.perf_counter() - t0_infer
             
-            y_prob = probs[:, 1]
             y_pred = np.argmax(probs, axis=1)
+
+            # Dynamic Probability Extraction for Calibration
+            n_classes_tested = len(np.unique(y_test))
+            if n_classes_tested != args.classes:
+                print(f"    [Warning] Detected {n_classes_tested} unique classes in test set, but --classes={args.classes}. Verify if this is correct")
+            
+            if args.classes == 2:
+                y_prob = probs[:, 1]
+                ece_score = expected_calibration_error(y_test, y_prob)
+                brier_score = brier_score_loss(y_test, y_prob)
+            else:
+                # Multi-class uses Top-1 Calibration
+                y_prob = np.max(probs, axis=1)
+                correctness_array = (y_pred == y_test).astype(int)
+                ece_score = expected_calibration_error(correctness_array, y_prob)
+                
+                # Manual Brier Score for Multi-class
+                y_test_onehot = np.eye(args.classes)[y_test]
+                brier_score = np.mean(np.sum((probs - y_test_onehot)**2, axis=1))
 
             # --- Hardware Metadata Extraction ---
             if hasattr(model, "get_info"):
@@ -194,16 +223,24 @@ def main():
                 "accuracy": accuracy_score(y_test, y_pred),
                 "macro_f1": f1_score(y_test, y_pred, average="macro"),
                 "balanced_acc": balanced_accuracy_score(y_test, y_pred),
-                "brier_score": brier_score_loss(y_test, y_prob),
-                "ece": expected_calibration_error(y_test, y_prob)
+                "brier_score": brier_score,
+                "ece": ece_score
             }
             
-            cm = confusion_matrix(y_test, y_pred, labels=[0, 1])
-            metrics["cm_00"], metrics["cm_01"] = cm[0, 0], cm[0, 1]
-            metrics["cm_10"], metrics["cm_11"] = cm[1, 0], cm[1, 1]
+            cm_labels = list(range(args.classes))
+            cm = confusion_matrix(y_test, y_pred, labels=cm_labels)
+            
+            for i in range(args.classes):
+                for j in range(args.classes):
+                    metrics[f"cm_{i}{j}"] = int(cm[i, j])
 
             all_metrics.append(metrics)
-            all_probs[f"{target_sub}_seed_{seed}"] = {"y_true": y_test.tolist(), "y_prob": y_prob.tolist()}
+
+            # Save correctness for Multi-Class Top-1 Calibration
+            if args.classes == 2:
+                all_probs[f"{target_sub}_seed_{seed}"] = {"y_true": y_test.tolist(), "y_prob": y_prob.tolist()}
+            else:
+                all_probs[f"{target_sub}_seed_{seed}"] = {"y_true": correctness_array.tolist(), "y_prob": y_prob.tolist()}
 
     # --- Save Raw Metrics ---
     df = pd.DataFrame(all_metrics)

@@ -68,8 +68,11 @@ class PyTorchClassifier:
         X_t = torch.tensor(X, dtype=torch.float32).unsqueeze(1).to(self.device)
         y_t = torch.tensor(y, dtype=torch.long).to(self.device)
         
+        # Dynamically detect class count from the labels
+        n_classes = len(np.unique(y))
+        
         # Initialize model and optimizer
-        self.model = self.model_class(nb_classes=2, Chans=X.shape[1], Samples=X.shape[2]).to(self.device)
+        self.model = self.model_class(nb_classes=n_classes, Chans=X.shape[1], Samples=X.shape[2]).to(self.device)
         criterion = nn.CrossEntropyLoss()
         optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
         
