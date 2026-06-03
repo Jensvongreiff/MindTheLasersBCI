@@ -6,6 +6,9 @@ from sklearn.preprocessing import StandardScaler
 
 import pandas as pd
 from sklearn.metrics import confusion_matrix
+from feature_extraction import load_features
+
+import pickle
 
 
 def plot_tsne_feature_spaces(
@@ -444,33 +447,35 @@ def plot_average_confusion_matrices(
 if __name__ == "__main__":
     features = load_features()
 
-    plot_tsne_feature_spaces(
-        features,
-        subject="A01",
-        methods=["bandpower", "csp", "morlet", "riemannian"],
-        output_path="figure_1_tsne_A01.png",
-    )
+    # plot_tsne_feature_spaces(
+    #     features,
+    #     subject="A01",
+    #     methods=["bandpower", "csp", "morlet", "riemannian_mdm"],
+    #     output_path="figure_1_tsne_A01.png",
+    # )
 
-    pivot = plot_cross_session_grouped_bar(
-        csv_path="part_2_2_cross_session_transfer.csv",
-        output_path="figure_2_cross_session_grouped_bar.png",
-    )
+    # pivot = plot_cross_session_grouped_bar(
+    #     csv_path="/home/dani/Documents/TUM/3.Semester/BCI/practical-ss26-team4/week4/features/part_2_2_cross_session_transfer.csv",
+    #     output_path="figure_2_cross_session_grouped_bar.png",
+    # )
 
-    print(pivot)
+    # print(pivot)
 
 
-    group_hunger_summary = plot_data_hunger_curves_from_csv(
-        csv_path="part_2_3_data_hunger_results.csv",
-        output_path="figure_3_data_hunger_curves.png",
-    )
+    # group_hunger_summary = plot_data_hunger_curves_from_csv(
+    #     csv_path="/home/dani/Documents/TUM/3.Semester/BCI/practical-ss26-team4/week4/features/part_2_3_data_hunger_results.csv",
+    #     output_path="figure_3_data_hunger_curves.png",
+    # )
 
-    print(group_hunger_summary)
+    # print(group_hunger_summary)
 
-    transfer_df, predictions = run_cross_session_transfer_all(features)
+
+    with open("/home/dani/Documents/TUM/3.Semester/BCI/practical-ss26-team4/week4/features/cross_session_predictions.pkl", "rb") as f:
+        predictions = pickle.load(f)
 
     plot_average_confusion_matrices(
         predictions,
-        methods=["bandpower", "csp", "morlet", "riemannian"],
+        methods=["bandpower", "csp", "morlet", "riemannian_mdm"],
         output_path="figure_4_average_confusion_matrices.png",
         normalize=True,
     )

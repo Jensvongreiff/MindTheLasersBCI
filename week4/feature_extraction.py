@@ -19,10 +19,11 @@ from pyriemann.estimation import Covariances
 from pyriemann.classification import MDM
 from pathlib import Path
 import pickle
+from pyriemann.tangentspace import TangentSpace
 
 
-from week4.loading import get_bci2a_mat_path, load_bci2a_dataset, load_bci2a_rest_runs
-from week4.preprocessing import BCI2A_CHANNEL_NAMES, preprocess_bci2a_dataset
+from loading import get_bci2a_mat_path, load_bci2a_dataset, load_bci2a_rest_runs
+from preprocessing import BCI2A_CHANNEL_NAMES, preprocess_bci2a_dataset
 # X = epochs.get_data()        # shape: (n_epochs, n_channels, n_times)
 # y = epochs.events[:, 2]      # integer label per epoch
 
@@ -525,7 +526,14 @@ def extract_riemannian_mdm_features(dataset, subject, train_or_eval):
 
     print("Covariance matrix shape:", cov_matrices.shape)
 
-    return cov_matrices, y01, feature_info
+    ts = TangentSpace(metric="riemann")
+    features = ts.fit_transform(cov_matrices)
+
+    print("Tangent-space feature shape:", features.shape)
+
+    return features, y01, feature_info
+
+   
 
 def extract_all_features_depracated(subject, train_or_eval, plot: bool = False):
     data_path = get_bci2a_mat_path(subject, "T" if train_or_eval else "E")
@@ -728,7 +736,7 @@ def output_features(plot: bool = False, output_dir: str = "features"):
 
     features = {}
 
-    data_path = Path("data/bci2a_dataset") 
+    data_path = Path("/home/dani/Documents/TUM/3.Semester/BCI/practical-ss26-team4/data") 
 
     dataset = load_bci2a_dataset(data_path)
 
@@ -762,7 +770,7 @@ def output_features(plot: bool = False, output_dir: str = "features"):
 
     return features
 
-def load_features(features_path: str = "features/all_features.pkl"):
+def load_features(features_path: str = "/home/dani/Documents/TUM/3.Semester/BCI/practical-ss26-team4/week4/features/all_features.pkl"):
     with open(features_path, "rb") as f:
         features = pickle.load(f)
     return features
@@ -775,26 +783,28 @@ def main():
     # features = output_features(plot=False)
 
     # For demonstration, load the saved features and print their shapes
-    features = load_features("features/all_features.pkl")
+    # features = load_features("features/all_features.pkl")
 
-    subjects = [
-        "A01", "A02", "A03", "A04", "A05",
-        "A06", "A07", "A08", "A09",
-    ]
-    methods = ["bandpower", "csp", "morlet", "riemannian_mdm"]
-    for subject in subjects:
-        print(f"\nSubject: {subject}")
-        for method in methods:
-            print(f"  Method: {method}")
-            X_csp_train = features[subject][method]["T"]["X"]
-            print("train features shape:", X_csp_train.shape)
-            y_csp_train = features[subject][method]["T"]["y"]
-            print("train labels shape:", y_csp_train.shape)
+    # subjects = [
+    #     "A01", "A02", "A03", "A04", "A05",
+    #     "A06", "A07", "A08", "A09",
+    # ]
+    # methods = ["bandpower", "csp", "morlet", "riemannian_mdm"]
+    # for subject in subjects:
+    #     print(f"\nSubject: {subject}")
+    #     for method in methods:
+    #         print(f"  Method: {method}")
+    #         X_csp_train = features[subject][method]["T"]["X"]
+    #         print("train features shape:", X_csp_train.shape)
+    #         y_csp_train = features[subject][method]["T"]["y"]
+    #         print("train labels shape:", y_csp_train.shape)
 
-            X_csp_eval = features[subject][method]["E"]["X"]
-            y_csp_eval = features[subject][method]["E"]["y"]
-            print("eval features shape:", X_csp_eval.shape)
-            print("eval labels shape:", y_csp_eval.shape)
+    #         X_csp_eval = features[subject][method]["E"]["X"]
+    #         y_csp_eval = features[subject][method]["E"]["y"]
+    #         print("eval features shape:", X_csp_eval.shape)
+    #         print("eval labels shape:", y_csp_eval.shape)
+
+    output_features(False, "/home/dani/Documents/TUM/3.Semester/BCI/practical-ss26-team4/week4/features")
 
 
 if __name__ == "__main__":

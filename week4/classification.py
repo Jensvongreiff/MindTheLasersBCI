@@ -7,6 +7,9 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.model_selection import StratifiedKFold, cross_val_score
 from sklearn.metrics import accuracy_score, confusion_matrix
 
+from feature_extraction import load_features
+import pickle
+
 def make_classifier():
     """
     Classifier used consistently for all feature methods.
@@ -121,6 +124,8 @@ def run_within_session_cv_all(
 
     for subject in subjects:
         for method in methods:
+            print(f"Running method {method} on subject {subject}")
+
             X = features[subject][method][session]["X"]
             y = features[subject][method][session]["y"]
 
@@ -291,6 +296,8 @@ def run_cross_session_transfer_all(
         predictions[subject] = {}
 
         for method in methods:
+            print(f"Running method {method} on subject {subject}")
+
             X_train = features[subject][method][train_session]["X"]
             y_train = features[subject][method][train_session]["y"]
 
@@ -500,6 +507,7 @@ def data_hunger_one(
     rng = np.random.default_rng(random_state)
 
     for n_per_class in train_sizes:
+        print(f"N_per_class: {n_per_class}")
         for repeat in range(n_repeats):
             seed = int(rng.integers(0, 1_000_000_000))
 
@@ -554,6 +562,8 @@ def run_data_hunger_all(
 
     for subject in subjects:
         for method in methods:
+            print(f"Running method {method} on subject {subject}")
+
             X_train = features[subject][method][train_session]["X"]
             y_train = features[subject][method][train_session]["y"]
 
@@ -772,6 +782,9 @@ def main22():
     transfer_df.to_csv("part_2_2_cross_session_transfer.csv", index=False)
     cross_session_summary_df.to_csv("part_2_2_cross_session_summary.csv", index=False)
 
+    with open("cross_session_predictions.pkl", "wb") as f:
+        pickle.dump(predictions, f)
+
     gap_df.to_csv("part_2_2_transfer_gap_per_subject.csv", index=False)
     gap_summary_df.to_csv("part_2_2_transfer_gap_summary.csv", index=False)
 
@@ -780,6 +793,7 @@ def main23():
     features = load_features()
     data_hunger_df = run_data_hunger_all(
         features,
+        subjects=["A01"],
         train_sizes=(5, 10, 20, 40, 72, 144),
         n_repeats=20,
         random_state=42,
@@ -819,4 +833,4 @@ def main23():
 
 
 if __name__ == "__main__":
-    main21()
+    main23()

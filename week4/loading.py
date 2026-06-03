@@ -25,7 +25,7 @@ def get_bci2a_mat_path(subject, session):
     else:
         subject_id = f"A{int(subject):02d}{session}.mat"
 
-    return Path("data/bci2a_dataset") / subject_id
+    return Path("/home/dani/Documents/TUM/3.Semester/BCI/practical-ss26-team4/data") / subject_id
 
 
 
