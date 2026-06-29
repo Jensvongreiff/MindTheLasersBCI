@@ -7,6 +7,7 @@ class SweepingLaser:
         self,
         x,
         wait_time=1.5,
+        initial_delay=0.0,
         grow_speed=500,
         beam_width=10,
         active_time=0.4,
@@ -15,13 +16,14 @@ class SweepingLaser:
         self.x = x
 
         self.wait_time = wait_time
+        self.initial_delay = initial_delay
         self.grow_speed = grow_speed
         self.beam_width = beam_width
         self.active_time = active_time
 
         self.state = "waiting"
 
-        self.timer = wait_time
+        self.timer = initial_delay
 
         self.current_height = 0
 
