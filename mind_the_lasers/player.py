@@ -13,6 +13,14 @@ class Player:
 
         self.direction = 0  # -1 = left, 0 = stop, 1 = right
 
+        self.base_speed = BALL_SPEED
+
+        self.speed = BALL_SPEED
+
+        self.boost_level = 0
+
+        self.rest_timer = 0
+
     @property
     def rect(self):
         return pygame.Rect(
@@ -26,13 +34,32 @@ class Player:
         self.x = x
         self.y = HEIGHT // 2
         self.direction = 0
+        self.speed = self.base_speed
+        self.boost_level = 0
+        self.rest_timer = 0
 
     def reset_lives(self):
         self.lives = MAX_LIVES
 
     def process_command(self, command):
+
         if command.name == "NONE":
             return
+
+        # Entering REST
+        if command.value == 0:
+
+            if self.direction != 0:
+                self.speed = self.base_speed
+                self.boost_level = 0
+                self.rest_timer = 0
+
+            self.direction = 0
+            return
+
+        # Leaving REST
+        if self.direction == 0:
+            self.speed = self.base_speed + self.boost_level * BOOST_PER_LEVEL
 
         self.direction = command.value
 
@@ -41,7 +68,19 @@ class Player:
         self.hit_flash_timer = HIT_FLASH_TIME
 
     def update(self, dt):
-        self.x += self.direction * BALL_SPEED * dt
+
+        if self.direction == 0:
+
+            self.rest_timer += dt
+
+            while (
+                self.rest_timer >= BOOST_CHARGE_TIME
+                and self.boost_level < MAX_BOOST_LEVEL
+            ):
+                self.boost_level += 1
+                self.rest_timer -= BOOST_CHARGE_TIME
+
+        self.x += self.direction * self.speed * dt
 
         self.x = max(BALL_RADIUS, min(WIDTH - BALL_RADIUS, self.x))
 

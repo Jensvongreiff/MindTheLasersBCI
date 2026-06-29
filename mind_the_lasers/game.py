@@ -98,6 +98,28 @@ class Game:
 
             pygame.draw.polygon(self.screen, color, points)
 
+    def draw_boost(self):
+
+        for i in range(MAX_BOOST_LEVEL):
+
+            x = WIDTH - 170 + i * 30
+            y = 25
+
+            color = (255, 215, 0) if i < self.player.boost_level else (90, 90, 90)
+
+            pygame.draw.polygon(
+                self.screen,
+                color,
+                [
+                    (x + 8, y),
+                    (x + 16, y + 12),
+                    (x + 10, y + 12),
+                    (x + 18, y + 28),
+                    (x + 6, y + 18),
+                    (x + 12, y + 18),
+                ],
+            )
+
     def draw_goal(self):
         pygame.draw.circle(
             self.screen,
@@ -108,6 +130,7 @@ class Game:
 
     def draw_hud(self):
         self.draw_hearts()
+        self.draw_boost()
 
         text = self.font.render(
             f"Level {self.level_index + 1}: {self.level.name}",
