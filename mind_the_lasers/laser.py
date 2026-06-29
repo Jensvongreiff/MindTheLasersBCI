@@ -36,6 +36,8 @@ class SweepingLaser:
             if self.timer <= 0:
                 self.state = "growing"
                 self.current_height = 0
+                self.has_hit_player = False
+
 
         elif self.state == "growing":
 
@@ -45,7 +47,6 @@ class SweepingLaser:
                 self.current_height = HEIGHT
                 self.state = "active"
                 self.timer = self.active_time
-                self.has_hit_player = False
 
         elif self.state == "active":
 
@@ -66,11 +67,17 @@ class SweepingLaser:
         )
 
     def collides(self, player):
-
         if self.state not in ("growing", "active"):
             return False
 
-        return self.rect.colliderect(player.rect)
+        if self.has_hit_player:
+            return False
+
+        if self.rect.colliderect(player.rect):
+            self.has_hit_player = True
+            return True
+
+        return False
 
     def draw(self, screen):
 

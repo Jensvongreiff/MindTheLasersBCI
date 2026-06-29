@@ -60,15 +60,12 @@ class Game:
     def update(self, dt):
         command = self.controller.get_command()
 
-        self.player.update(command, dt)
+        self.player.process_command(command)
+        self.player.update(dt)
         self.level.update(dt)
 
         for laser in self.level.lasers:
-            if laser.state == "waiting":
-                laser.has_hit_player = False
-
-            elif laser.collides(self.player) and not laser.has_hit_player:
-                laser.has_hit_player = True
+            if laser.collides(self.player):
                 self.player.hit()
 
         if self.player.lives <= 0:

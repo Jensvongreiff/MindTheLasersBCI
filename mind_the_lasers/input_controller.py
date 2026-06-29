@@ -6,6 +6,7 @@ class Command(Enum):
     LEFT = -1
     REST = 0
     RIGHT = 1
+    NONE = 99
 
 
 class KeyboardController:
@@ -21,4 +22,4 @@ class KeyboardController:
         if keys[pygame.K_LEFT]:
             return Command.LEFT
 
-        return Command.REST
+        return Command.NONE
