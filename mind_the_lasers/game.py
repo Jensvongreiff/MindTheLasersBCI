@@ -3,7 +3,7 @@ import pygame
 from settings import *
 from player import Player
 from level import make_levels
-from input_controller import KeyboardController
+from input_controller import KeyboardController, UDPController
 
 
 class Game:
@@ -18,7 +18,7 @@ class Game:
         self.big_font = pygame.font.SysFont(None, 72)
 
         self.player = Player()
-        self.controller = KeyboardController()
+        self.controller = UDPController()  
 
         self.levels = make_levels()
         self.level_index = 0
@@ -58,6 +58,7 @@ class Game:
         pygame.quit()
 
     def update(self, dt):
+        self.controller.update()
         command = self.controller.get_command()
 
         self.player.process_command(command)
