@@ -1,9 +1,9 @@
 import pygame
 
-from settings import *
-from player import Player
-from level import make_levels
-from input_controller import KeyboardController
+from mind_the_lasers.src.game.settings import *
+from mind_the_lasers.src.game.player import Player
+from mind_the_lasers.src.game.level import make_levels
+from mind_the_lasers.src.game.input_controller import KeyboardController
 
 
 class Game:
