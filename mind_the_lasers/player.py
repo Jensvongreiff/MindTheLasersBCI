@@ -18,6 +18,7 @@ class Player:
         self.speed = BALL_SPEED
 
         self.boost_level = 0
+        self.boost_timer = 0
 
         self.rest_timer = 0
 
@@ -37,6 +38,7 @@ class Player:
         self.speed = self.base_speed
         self.boost_level = 0
         self.rest_timer = 0
+        self.boost_timer = 0
 
     def reset_lives(self):
         self.lives = MAX_LIVES
@@ -46,20 +48,18 @@ class Player:
         if command.name == "NONE":
             return
 
-        # Entering REST
         if command.value == 0:
-
-            if self.direction != 0:
-                self.speed = self.base_speed
-                self.boost_level = 0
-                self.rest_timer = 0
-
             self.direction = 0
             return
 
-        # Leaving REST
         if self.direction == 0:
             self.speed = self.base_speed + self.boost_level * BOOST_PER_LEVEL
+
+            if self.boost_level > 0:
+                self.boost_timer = BOOST_DURATION
+
+            self.boost_level = 0
+            self.rest_timer = 0
 
         self.direction = command.value
 
@@ -70,6 +70,8 @@ class Player:
     def update(self, dt):
 
         if self.direction == 0:
+            self.speed = self.base_speed
+            self.boost_timer = 0
 
             self.rest_timer += dt
 
@@ -79,6 +81,13 @@ class Player:
             ):
                 self.boost_level += 1
                 self.rest_timer -= BOOST_CHARGE_TIME
+
+        else:
+            if self.boost_timer > 0:
+                self.boost_timer -= dt
+
+                if self.boost_timer <= 0:
+                    self.speed = self.base_speed
 
         self.x += self.direction * self.speed * dt
 

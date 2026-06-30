@@ -23,3 +23,4 @@ class KeyboardController:
             return Command.LEFT
 
         return Command.NONE
+
