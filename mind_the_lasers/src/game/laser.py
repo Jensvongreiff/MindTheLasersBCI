@@ -1,5 +1,5 @@
 import pygame
-from settings import *
+from mind_the_lasers.src.game.settings import *
 
 
 class SweepingLaser:
