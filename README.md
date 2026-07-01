@@ -1,5 +1,7 @@
 # BCI Practical SS26 - Team 4
 
+⚠️For Week 6 we have different branches for domain adaptation, online adaptation and domain generalization. Please check the READMEs in week6 of each branch for implementation details. 
+
 Welcome to the repository for Team 4's Brain-Computer Interface (BCI) Practical Course project at TUM. This repository documents our progress in building a complete BCI pipeline, using the `baseline-bci-26` repository as our foundational blueprint and tutorial.
 
 ## 👥 Team Members
