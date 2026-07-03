@@ -3,7 +3,8 @@ from typing import Optional, Union, Dict
 from signal import EEGWindow
 from filtering import BaseFilter
 from artifact_removal import BaseArtifactRemoval
-from model import BaseFeatureExtractor, BaseClassifier, BaseEndToEndModel
+from model import BaseClassifier, BaseEndToEndModel
+from feature_extraction import BaseFeatureExtractor
 
 class BCIPipeline:
     """
