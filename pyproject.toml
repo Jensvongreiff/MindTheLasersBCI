@@ -20,7 +20,8 @@ dependencies = [
     "umap-learn>=0.5.9.post2",
     "pyqt5>=5.15.11",
     "pyqt5-qt5<5.15.11",
-    "torch"
+    "torch",
+    "pygame"
 ]
 
 [tool.uv.sources]
@@ -28,5 +29,5 @@ torch = { index = "pytorch-cuda" }
 
 [[tool.uv.index]]
 name = "pytorch-cuda"
-url = "https://download.pytorch.org/whl/cu132"
+url = "https://download.pytorch.org/whl/cu128"
 explicit = true
