@@ -13,6 +13,8 @@ class IIRBandpassFilter(BaseFilter):
     """
     Example: 8-30Hz Bandpass filter for Motor Imagery.
     Uses lfilter (causal) instead of filtfilt (non-causal) for online safe processing.
+
+    note: Look into maintaining filter states between windows to reduce edge artifacts.
     """
     def __init__(self, lowcut: float, highcut: float, fs: int, order: int = 4):
         self.fs = fs
