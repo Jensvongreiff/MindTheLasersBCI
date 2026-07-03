@@ -1,10 +1,8 @@
 from abc import ABC, abstractmethod
-from matplotlib.pylab import Sequence
+from typing import Optional, Sequence, Union
 import numpy as np
 from signal import EEGWindow
 
-from pyparsing import Optional
-from sympy import Union
 
 class BaseArtifactRemoval(ABC):
     """Base class for artifact removal."""
