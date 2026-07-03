@@ -3,12 +3,6 @@ import numpy as np
 from signal import EEGWindow
 
 # --- Base Classes ---
-class BaseFeatureExtractor(ABC):
-    @abstractmethod
-    def extract(self, window: EEGWindow) -> np.ndarray:
-        """Takes an EEG window and returns a 1D feature vector."""
-        pass
-
 class BaseClassifier(ABC):
     @abstractmethod
     def predict_proba(self, features: np.ndarray) -> dict:
@@ -22,18 +16,6 @@ class BaseEndToEndModel(ABC):
         pass
 
 # --- Example Implementations ---
-class CSPFeatureExtractor(BaseFeatureExtractor):
-    def __init__(self, pre_trained_csp):
-        # Expects an already fitted mne.decoding.CSP object
-        self.csp = pre_trained_csp
-
-    def extract(self, window: EEGWindow) -> np.ndarray:
-        # CSP expects shape (n_epochs, n_channels, n_times)
-        # We add a dummy epoch dimension for online single-window processing
-        data_expanded = np.expand_dims(window.data, axis=0)
-        features = self.csp.transform(data_expanded)
-        return features[0] # Return the 1D vector
-
 class LDAClassifier(BaseClassifier):
     def __init__(self, pre_trained_lda):
         # Expects an already fitted sklearn.discriminant_analysis.LinearDiscriminantAnalysis
