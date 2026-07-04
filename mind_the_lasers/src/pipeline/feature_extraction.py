@@ -3,7 +3,7 @@ from typing import Optional, Sequence, Tuple
 import numpy as np
 from scipy.signal import butter, sosfilt, sosfiltfilt
 
-from signal import EEGWindow
+from .signal import EEGWindow
 
 # Common BCI Competition IV 2a EEG channel order used by the offline feature_extraction.py.
 # These defaults are only a convenience. For another headset/order, pass

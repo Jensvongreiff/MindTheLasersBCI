@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Optional, Sequence, Union
 import numpy as np
-from signal import EEGWindow
+from .signal import EEGWindow
 
 
 class BaseArtifactRemoval(ABC):

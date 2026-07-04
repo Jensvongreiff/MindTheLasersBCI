@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 import numpy as np
 from scipy.signal import butter, lfilter
-from signal import EEGWindow
+from .signal import EEGWindow
 
 class BaseFilter(ABC):
     """Base class for all filtering steps."""
