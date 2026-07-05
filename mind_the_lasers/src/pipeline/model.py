@@ -56,65 +56,59 @@ class EEGNet(nn.Module):
 
 
 # --- End-To-End Model Wrapper ---
+class LDAWrapper(BaseClassifier):
+    def __init__(self, model_path: str):
+        self.model_path = model_path
+        self.lda = None
+        if os.path.exists(self.model_path):
+            with open(self.model_path, 'rb') as f:
+                self.lda = pickle.load(f)
+
+    def fit(self, X: np.ndarray, y: np.ndarray):
+        from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+        self.lda = LinearDiscriminantAnalysis()
+        self.lda.fit(X, y)
+        
+        os.makedirs(os.path.dirname(self.model_path), exist_ok=True)
+        with open(self.model_path, 'wb') as f:
+            pickle.dump(self.lda, f)
+
+    def predict_proba(self, features: np.ndarray) -> dict:
+        probs = self.lda.predict_proba(np.expand_dims(features, axis=0))[0]
+        return {"left": float(probs[0]), "right": float(probs[1]), "rest": float(probs[2])}
+
+
 class EEGNetBCIWrapper(BaseEndToEndModel):
     def __init__(self, weights_path: str, n_channels: int, n_samples: int, n_classes: int = 3):
         self.model = EEGNet(nb_classes=n_classes, Chans=n_channels, Samples=n_samples)
         self.weights_path = weights_path
-        
         if os.path.exists(weights_path):
             self.model.load_state_dict(torch.load(weights_path, map_location='cpu', weights_only=True))
-        
         self.model.eval()
 
     def fit(self, X: np.ndarray, y: np.ndarray):
-        """Standalone training execution."""
+        """Executes offline stochastic gradient descent to formulate subject-specific weights."""
         criterion = nn.CrossEntropyLoss()
         optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
 
         X_t = torch.tensor(X, dtype=torch.float32).unsqueeze(1) 
         y_t = torch.tensor(y, dtype=torch.long)
-        dataset = TensorDataset(X_t, y_t)
-        loader = DataLoader(dataset, batch_size=8, shuffle=True)
+        loader = DataLoader(TensorDataset(X_t, y_t), batch_size=16, shuffle=True)
 
         self.model.train()
-        for epoch in range(40):
+        for epoch in range(50):
             for batch_x, batch_y in loader:
                 optimizer.zero_grad()
-                out = self.model(batch_x)
-                loss = criterion(out, batch_y)
+                loss = criterion(self.model(batch_x), batch_y)
                 loss.backward()
                 optimizer.step()
 
+        os.makedirs(os.path.dirname(self.weights_path), exist_ok=True)
         torch.save(self.model.state_dict(), self.weights_path)
         self.model.eval()
 
     def predict_proba(self, window: EEGWindow) -> dict:
         tensor_data = torch.tensor(window.data, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
         with torch.no_grad():
-            output = self.model(tensor_data)
-            probs = torch.softmax(output, dim=1).numpy()[0]
-
+            probs = torch.softmax(self.model(tensor_data), dim=1).numpy()[0]
         return {"left": float(probs[0]), "right": float(probs[1]), "rest": float(probs[2])}
-
-
-# --- Traditional Classifier Wrapper ---
-class LDAWrapper(BaseClassifier):
-    def __init__(self, lda_model_path: str):
-        """
-        Loads the fitted scikit-learn LDA object. 
-        Scikit-learn is self-contained via pickle.
-        """
-        with open(lda_model_path, 'rb') as f:
-            self.lda = pickle.load(f)
-
-    def predict_proba(self, features: np.ndarray) -> dict:
-        # sklearn expects a 2D array: (n_samples, n_features)
-        features_expanded = np.expand_dims(features, axis=0)
-        
-        probs = self.lda.predict_proba(features_expanded)[0]
-
-        return {
-            "left": float(probs[0]),
-            "right": float(probs[1]),
-            "rest": float(probs[2])
-        }

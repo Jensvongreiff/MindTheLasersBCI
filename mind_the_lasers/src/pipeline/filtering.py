@@ -30,7 +30,8 @@ class IIRBandpassFilter(BaseFilter):
         
         # Return a new window object to prevent mutability bugs
         return EEGWindow(
-            data=filtered_data,
-            sampling_rate=window.sampling_rate,
-            timestamp=window.timestamp
-        )
+        data=filtered_data,
+        sampling_rate=window.sampling_rate,
+        timestamp=window.timestamp,
+        ground_truth=window.ground_truth,          # CRITICAL ADDITION
+        is_artifact_free=window.is_artifact_free)

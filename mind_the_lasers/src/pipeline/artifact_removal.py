@@ -225,5 +225,6 @@ class SpatialFilterICA(BaseArtifactRemoval):
             data=cleaned_raw.get_data(),
             sampling_rate=window.sampling_rate,
             timestamp=window.timestamp,
+            ground_truth=window.ground_truth,
             is_artifact_free=True,
         )

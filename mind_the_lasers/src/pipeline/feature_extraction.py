@@ -22,9 +22,13 @@ DEFAULT_MORLET_CHANNELS = ("C3", "C4")
 # --- Base Classes ---
 class BaseFeatureExtractor(ABC):
     @abstractmethod
-    def extract(self, window: EEGWindow) -> np.ndarray:
-        """Takes an EEG window and returns a 1D feature vector."""
-        pass
+    def fit(self, X: np.ndarray, y: np.ndarray): pass
+    
+    @abstractmethod
+    def transform(self, X: np.ndarray) -> np.ndarray: pass
+
+    @abstractmethod
+    def extract(self, window: EEGWindow) -> np.ndarray: pass
 
 
 # --- Shared feature helpers ---
@@ -140,59 +144,34 @@ def _select_channels(data: np.ndarray, channel_indices: Optional[Sequence[int]])
 
 
 # --- Feature Extractor Implementations ---
-class CSPFeatureExtractor(BaseFeatureExtractor):
-    """
-    Common Spatial Pattern feature extractor.
-
-    Online usage expects an already fitted mne.decoding.CSP object. For
-    convenience, this class also exposes fit(X, y), where X has shape
-    (n_epochs, n_channels, n_times).
-    """
-
-    def __init__(
-        self,
-        pre_trained_csp=None,
-        n_components: int = 4,
-        reg: str = "ledoit_wolf",
-        log: bool = True,
-        norm_trace: bool = False,
-    ):
-        self.csp = pre_trained_csp
+class CSPWrapper(BaseFeatureExtractor):
+    def __init__(self, model_path: str, n_components: int = 4):
+        self.model_path = model_path
         self.n_components = n_components
-        self.reg = reg
-        self.log = log
-        self.norm_trace = norm_trace
+        self.csp = None
+        
+        if os.path.exists(self.model_path):
+            with open(self.model_path, 'rb') as f:
+                self.csp = pickle.load(f)
 
-    def fit(self, X: np.ndarray, y: np.ndarray) -> "CSPFeatureExtractor":
-        """Fit CSP from calibration epochs and labels."""
-        if self.csp is None:
-            from mne.decoding import CSP
+    def fit(self, X: np.ndarray, y: np.ndarray):
+        """Fits the Common Spatial Pattern filters using MNE decoding logic."""
+        from mne.decoding import CSP
+        self.csp = CSP(n_components=self.n_components, reg=None, log=True, norm_trace=False)
+        self.csp.fit(X, y)
+        
+        os.makedirs(os.path.dirname(self.model_path), exist_ok=True)
+        with open(self.model_path, 'wb') as f:
+            pickle.dump(self.csp, f)
 
-            self.csp = CSP(
-                n_components=self.n_components,
-                reg=self.reg,
-                log=self.log,
-                norm_trace=self.norm_trace,
-            )
-
-        X = np.asarray(X, dtype=float)
-        y = np.asarray(y)
-        if X.ndim != 3:
-            raise ValueError(f"CSP fit expects X with shape (epochs, channels, times), got {X.shape}.")
-
-        # Original offline code remapped labels to start at 0.
-        y_zero_based = y - y.min()
-        self.csp.fit(X, y_zero_based)
-        return self
+    def transform(self, X: np.ndarray) -> np.ndarray:
+        """Transforms a batch dataset (Offline)."""
+        return self.csp.transform(X)
 
     def extract(self, window: EEGWindow) -> np.ndarray:
-        if self.csp is None:
-            raise RuntimeError("CSPFeatureExtractor must be fitted or given a pre_trained_csp before extract().")
-
-        # CSP expects shape (n_epochs, n_channels, n_times).
-        data_expanded = np.expand_dims(_as_window_array(window), axis=0)
-        features = self.csp.transform(data_expanded)
-        return np.asarray(features[0]).ravel()
+        """Transforms a single live window (Online)."""
+        data_expanded = np.expand_dims(window.data, axis=0)
+        return self.csp.transform(data_expanded)[0]
 
 
 class BandpowerFeatureExtractor(BaseFeatureExtractor):

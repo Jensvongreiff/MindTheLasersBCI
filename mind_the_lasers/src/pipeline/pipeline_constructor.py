@@ -1,6 +1,5 @@
-import time
 import multiprocessing
-import numpy as np
+import scipy.signal as sig
 from typing import Optional, Dict
 from .signal import EEGWindow
 from .filtering import BaseFilter
@@ -28,59 +27,28 @@ class BCIPipeline:
             self.feature_step = feature_step
             self.classifier_step = classifier_step
 
-    def calibrate(self, trials_per_class: int = 15, trial_duration: float = 1.0, fs: int = 250):
-        """Optional synchronous data collection and model fitting phase."""
-        try:
-            from pylsl import StreamInlet, resolve_byprop
-        except ImportError:
-            raise ImportError("pylsl required for calibration.")
-
-        print("Resolving EEG stream for calibration...")
-        streams = resolve_byprop('type', 'EEG', timeout=5.0)
-        inlet = StreamInlet(streams[0])
+    def calibrate(self, X_train, y_train):
+        """Fits the pipeline models given an analytical offline training set."""
+        print(f"\nCalibrating Pipeline on Dataset: {X_train.shape}...")
         
-        classes = {"left": 0, "right": 1, "rest": 2}
-        X, y = [], []
+        # 1. Apply matching causal filter to the offline batch array
+        if self.filter_step:
+            print("Applying causal filter to training data to match online phase...")
+            X_train = sig.lfilter(self.filter_step.b, self.filter_step.a, X_train, axis=2)
 
-        print("\nCalibration starting. Follow the console prompts.\n")
-        time.sleep(3)
-
-        for class_name, label in classes.items():
-            for trial in range(trials_per_class):
-                print(f"[{class_name.upper()}] - Trial {trial+1}/{trials_per_class}")
-                time.sleep(1.5)
-                print(">>> GO! <<<")
-
-                inlet.pull_chunk() 
-                start_time = time.time()
-                trial_data = []
-
-                while time.time() - start_time < trial_duration:
-                    chunk, _ = inlet.pull_chunk()
-                    if chunk:
-                        trial_data.extend(chunk)
-
-                arr = np.array(trial_data).T
-                required_samples = int(trial_duration * fs)
-                
-                if arr.shape[1] >= required_samples:
-                    X.append(arr[:, :required_samples])
-                    y.append(label)
-
-        X_train, y_train = np.stack(X), np.array(y)
-        print(f"\nCollection complete. Training on shape: {X_train.shape}")
-
+        # 2. Proceed to fit the models
         if self.model_path == 'end_to_end':
             self.end_to_end_model.fit(X_train, y_train)
         else:
-            # Requires implementing fit() in Feature extractor and classifier
-            features = self.feature_step.fit_transform(X_train, y_train)
+            self.feature_step.fit(X_train, y_train)
+            features = self.feature_step.transform(X_train)
             self.classifier_step.fit(features, y_train)
-            
-        print("Calibration successful. Weights saved.")
+        print("Calibration successful. Weights serialized.")
 
     def process_window(self, window: EEGWindow) -> Dict[str, float]:
         current_data = window
+        
+        # Execute preprocessing steps if they exist
         if self.filter_step:
             current_data = self.filter_step.process(current_data)
         if self.artifact_step:
@@ -93,13 +61,17 @@ class BCIPipeline:
             return self.classifier_step.predict_proba(features)
 
 def bci_worker_process(pipeline: BCIPipeline, input_queue: multiprocessing.Queue, output_queue: multiprocessing.Queue):
-    print("BCI Worker Process Started.")
+    print("BCI Pipeline Computational Process Initialized.")
     while True:
         try:
             window = input_queue.get() 
-            if window is None: 
+            if window is None: # Forward the EOF sentinel
+                output_queue.put(None)
                 break
             probabilities = pipeline.process_window(window)
-            output_queue.put({"timestamp": window.timestamp, "probabilities": probabilities})
+            output_queue.put({
+                "probabilities": probabilities, 
+                "ground_truth": window.ground_truth
+            })
         except Exception as e:
-            print(f"Error in BCI pipeline: {e}")
+            print(f"Non-Fatal Exception in Processing Thread: {e}")
