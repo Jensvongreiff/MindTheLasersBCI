@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Optional, Sequence, Tuple
+import os
+import pickle
 import numpy as np
 from scipy.signal import butter, sosfilt, sosfiltfilt
 
@@ -22,10 +24,10 @@ DEFAULT_MORLET_CHANNELS = ("C3", "C4")
 # --- Base Classes ---
 class BaseFeatureExtractor(ABC):
     @abstractmethod
-    def fit(self, X: np.ndarray, y: np.ndarray): pass
-    
+    def fit(self, X: np.ndarray, y: np.ndarray, sampling_rate: float): pass
+
     @abstractmethod
-    def transform(self, X: np.ndarray) -> np.ndarray: pass
+    def transform(self, X: np.ndarray, sampling_rate: float) -> np.ndarray: pass
 
     @abstractmethod
     def extract(self, window: EEGWindow) -> np.ndarray: pass
@@ -154,7 +156,7 @@ class CSPWrapper(BaseFeatureExtractor):
             with open(self.model_path, 'rb') as f:
                 self.csp = pickle.load(f)
 
-    def fit(self, X: np.ndarray, y: np.ndarray):
+    def fit(self, X: np.ndarray, y: np.ndarray, sampling_rate: float | None = None):
         """Fits the Common Spatial Pattern filters using MNE decoding logic."""
         from mne.decoding import CSP
         self.csp = CSP(n_components=self.n_components, reg=None, log=True, norm_trace=False)
@@ -164,14 +166,21 @@ class CSPWrapper(BaseFeatureExtractor):
         with open(self.model_path, 'wb') as f:
             pickle.dump(self.csp, f)
 
-    def transform(self, X: np.ndarray) -> np.ndarray:
+    def transform(self, X: np.ndarray, sampling_rate: float | None = None) -> np.ndarray:
         """Transforms a batch dataset (Offline)."""
+        if self.csp is None:
+            raise RuntimeError(
+                "CSP has not been fitted or loaded. Call fit() first."
+            )
+
         return self.csp.transform(X)
 
     def extract(self, window: EEGWindow) -> np.ndarray:
         """Transforms a single live window (Online)."""
-        data_expanded = np.expand_dims(window.data, axis=0)
-        return self.csp.transform(data_expanded)[0]
+        return self.transform(
+            window.data[np.newaxis, :, :],
+            sampling_rate=window.sampling_rate,
+        )[0]
 
 
 class BandpowerFeatureExtractor(BaseFeatureExtractor):
@@ -233,30 +242,90 @@ class BandpowerFeatureExtractor(BaseFeatureExtractor):
             return (float(self.iaf) - 2.0, float(self.iaf) + 2.0)
         # Sensible non-subject-specific default when no resting-state IAF is supplied.
         return (8.0, 12.0)
+    
+    def fit(self, X: np.ndarray, y: np.ndarray, sampling_rate: float | None = None):
+        # No fitting needed for bandpower.
+        return self
 
-    def extract(self, window: EEGWindow) -> np.ndarray:
-        data = _as_window_array(window)
-        data_motor = _select_channels(data, self.channel_indices)
-        sfreq = float(window.sampling_rate)
+    def transform(
+        self,
+        X: np.ndarray,
+        sampling_rate: float,
+    ) -> np.ndarray:
+        """
+        Transform a batch of EEG epochs into mu/beta log-bandpower features.
 
-        mu = _bandpass_window(
-            data_motor,
+        Parameters
+        ----------
+        X:
+            EEG data with shape:
+                (n_epochs, n_channels, n_samples)
+
+            A single epoch with shape:
+                (n_channels, n_samples)
+
+            is also accepted and converted to a batch of size one.
+
+        sampling_rate:
+            Sampling rate in Hz.
+
+        Returns
+        -------
+        np.ndarray
+            Shape:
+                (n_epochs, 2 * n_selected_channels)
+
+            Feature order:
+                channel_1_mu, channel_2_mu, ...,
+                channel_1_beta, channel_2_beta, ...
+        """
+        X = np.asarray(X, dtype=float)
+
+        if X.ndim == 2:
+            X = np.expand_dims(X, axis=0)
+
+        if X.ndim != 3:
+            raise ValueError(
+                "Expected X with shape "
+                f"(n_epochs, n_channels, n_samples), got {X.shape}."
+            )
+
+        if X.shape[-1] < 2:
+            raise ValueError("Each EEG epoch must contain at least two samples.")
+
+        X_selected = _select_channels(X, self.channel_indices)
+        sfreq = float(sampling_rate)
+
+        X_mu = _bandpass_window(
+            X_selected,
             sfreq=sfreq,
             band=self.effective_mu_band,
             order=self.filter_order,
             zero_phase=self.zero_phase,
         )
-        beta = _bandpass_window(
-            data_motor,
+
+        X_beta = _bandpass_window(
+            X_selected,
             sfreq=sfreq,
             band=self.beta_band,
             order=self.filter_order,
             zero_phase=self.zero_phase,
         )
 
-        feat_mu = _logvar(mu, eps=self.eps)
-        feat_beta = _logvar(beta, eps=self.eps)
-        return np.concatenate([feat_mu, feat_beta], axis=0).ravel()
+        # Both have shape: (n_epochs, n_selected_channels)
+        features_mu = _logvar(X_mu, eps=self.eps)
+        features_beta = _logvar(X_beta, eps=self.eps)
+
+        return np.concatenate(
+            [features_mu, features_beta],
+            axis=1,
+        )
+
+    def extract(self, window: EEGWindow) -> np.ndarray:
+        return self.transform(
+            window.data[np.newaxis, :, :],
+            sampling_rate=window.sampling_rate,
+        )[0]
 
 
 class MorletWaveletFeatureExtractor(BaseFeatureExtractor):
@@ -305,17 +374,61 @@ class MorletWaveletFeatureExtractor(BaseFeatureExtractor):
             raise ValueError("freqs must be a non-empty 1D sequence.")
         if self.n_cycles.shape != self.freqs.shape:
             raise ValueError("n_cycles must have the same length as freqs.")
+    
+    def fit(self, X: np.ndarray, y: np.ndarray, sampling_rate: float | None = None):
+        # No fitting needed for Morlet.
+        return self
 
-    def extract(self, window: EEGWindow) -> np.ndarray:
+    def transform(
+        self,
+        X: np.ndarray,
+        sampling_rate: float,
+    ) -> np.ndarray:
+        """
+        Transform a batch of EEG epochs into flattened Morlet
+        log-amplitude feature vectors.
+
+        Parameters
+        ----------
+        X:
+            EEG data with shape:
+                (n_epochs, n_channels, n_samples)
+
+            A single epoch with shape:
+                (n_channels, n_samples)
+
+            is also accepted and converted to a batch of size one.
+
+        sampling_rate:
+            Sampling rate in Hz.
+
+        Returns
+        -------
+        np.ndarray
+            Shape:
+                (n_epochs, n_selected_channels * n_freqs * n_selected_times)
+        """
         from mne.time_frequency import tfr_array_morlet
 
-        data = _as_window_array(window)
-        data_sel = _select_channels(data, self.channel_indices)
-        data_epoch = np.expand_dims(data_sel, axis=0)  # (1, channels, samples)
-        sfreq = float(window.sampling_rate)
+        X = np.asarray(X, dtype=float)
+
+        if X.ndim == 2:
+            X = np.expand_dims(X, axis=0)
+
+        if X.ndim != 3:
+            raise ValueError(
+                "Expected X with shape "
+                f"(n_epochs, n_channels, n_samples), got {X.shape}."
+            )
+
+        if X.shape[-1] < 2:
+            raise ValueError("Each EEG epoch must contain at least two samples.")
+
+        X_selected = _select_channels(X, self.channel_indices)
+        sfreq = float(sampling_rate)
 
         complex_tfr = tfr_array_morlet(
-            data_epoch,
+            X_selected,
             sfreq=sfreq,
             freqs=self.freqs,
             n_cycles=self.n_cycles,
@@ -324,22 +437,37 @@ class MorletWaveletFeatureExtractor(BaseFeatureExtractor):
             n_jobs=None,
         )
 
-        # complex_tfr shape: (1, n_channels, n_freqs, n_times)
-        log_amplitude = np.log(np.abs(complex_tfr[0]) + self.eps)
+        # Shape:
+        # (n_epochs, n_selected_channels, n_freqs, n_times)
+        log_amplitude = np.log(
+            np.abs(complex_tfr) + self.eps
+        )
 
         if self.time_window is not None:
-            n_times = data.shape[-1]
+            n_times = X_selected.shape[-1]
             times = self.tmin + np.arange(n_times) / sfreq
-            t0, t1 = self.time_window
-            t_mask = (times >= t0) & (times <= t1)
-            if not np.any(t_mask):
+
+            t_start, t_end = self.time_window
+            time_mask = (times >= t_start) & (times <= t_end)
+
+            if not np.any(time_mask):
                 raise ValueError(
                     f"No samples found in time_window={self.time_window}. "
-                    f"Window time range is {times[0]:.3f} to {times[-1]:.3f} s."
+                    f"Epoch time range is "
+                    f"{times[0]:.3f} to {times[-1]:.3f} seconds."
                 )
-            log_amplitude = log_amplitude[:, :, t_mask]
 
-        return log_amplitude.reshape(-1)
+            log_amplitude = log_amplitude[..., time_mask]
+
+        n_epochs = log_amplitude.shape[0]
+
+        return log_amplitude.reshape(n_epochs, -1)
+
+    def extract(self, window: EEGWindow) -> np.ndarray:
+        return self.transform(
+            window.data[np.newaxis, :, :],
+            sampling_rate=window.sampling_rate,
+        )[0]
 
 
 class RiemannianTangentSpaceFeatureExtractor(BaseFeatureExtractor):
@@ -402,37 +530,78 @@ class RiemannianTangentSpaceFeatureExtractor(BaseFeatureExtractor):
         cov_estimator = Covariances(estimator=self.covariance_estimator)
         return cov_estimator.fit_transform(X_filt)
 
-    def fit(self, X: np.ndarray, sampling_rate: float) -> "RiemannianTangentSpaceFeatureExtractor":
+    def fit(self, X: np.ndarray, y: np.ndarray | None = None, sampling_rate: float | None = None) -> "RiemannianTangentSpaceFeatureExtractor":
         """Fit TangentSpace from calibration epochs."""
         from pyriemann.tangentspace import TangentSpace
+
+        if sampling_rate is None:
+            raise ValueError("sampling_rate is required.")
 
         cov_matrices = self._covariances_from_epochs(X, sampling_rate)
         self.tangent_space = TangentSpace(metric=self.metric)
         self.tangent_space.fit(cov_matrices)
         return self
+    
+    def transform(
+        self,
+        X: np.ndarray,
+        sampling_rate: float,
+    ) -> np.ndarray:
+        """
+        Transform a batch of EEG epochs into Riemannian
+        tangent-space feature vectors.
 
-    def extract(self, window: EEGWindow) -> np.ndarray:
+        The tangent-space reference must already have been fitted.
+
+        Parameters
+        ----------
+        X:
+            EEG data with shape:
+                (n_epochs, n_channels, n_samples)
+
+            A single epoch with shape:
+                (n_channels, n_samples)
+
+            is also accepted and converted to a batch of size one.
+
+        sampling_rate:
+            Sampling rate in Hz. It is required when apply_bandpass=True.
+            It is still passed consistently when filtering is disabled.
+
+        Returns
+        -------
+        np.ndarray
+            Shape:
+                (n_epochs, n_tangent_features)
+        """
         if self.tangent_space is None:
             raise RuntimeError(
-                "RiemannianTangentSpaceFeatureExtractor requires a fitted tangent_space. "
-                "Call fit(X_calibration, sampling_rate) or pass tangent_space=... first."
+                "RiemannianTangentSpaceFeatureExtractor requires a fitted "
+                "tangent_space. Call fit(...) or pass tangent_space=... first."
             )
 
-        data = _as_window_array(window)
-        cov_matrices = self._covariances_from_epochs(data, float(window.sampling_rate))
+        X = np.asarray(X, dtype=float)
+
+        if X.ndim == 2:
+            X = np.expand_dims(X, axis=0)
+
+        if X.ndim != 3:
+            raise ValueError(
+                "Expected X with shape "
+                f"(n_epochs, n_channels, n_samples), got {X.shape}."
+            )
+
+        cov_matrices = self._covariances_from_epochs(
+            X,
+            sfreq=float(sampling_rate),
+        )
+
         features = self.tangent_space.transform(cov_matrices)
-        return np.asarray(features[0]).ravel()
 
+        return np.asarray(features, dtype=float)
 
-# --- Example Implementations ---
-# class CSPFeatureExtractor(BaseFeatureExtractor):
-#     def __init__(self, pre_trained_csp):
-#         # Expects an already fitted mne.decoding.CSP object
-#         self.csp = pre_trained_csp
-
-#     def extract(self, window: EEGWindow) -> np.ndarray:
-#         # CSP expects shape (n_epochs, n_channels, n_times)
-#         # We add a dummy epoch dimension for online single-window processing
-#         data_expanded = np.expand_dims(window.data, axis=0)
-#         features = self.csp.transform(data_expanded)
-#         return features[0] # Return the 1D vector
+    def extract(self, window: EEGWindow) -> np.ndarray:
+        return self.transform(
+            window.data[np.newaxis, :, :],
+            sampling_rate=window.sampling_rate,
+        )[0]
