@@ -1,4 +1,5 @@
 import multiprocessing
+import time
 import scipy.signal as sig
 from typing import Optional, Dict
 from .signal import EEGWindow
@@ -68,10 +69,14 @@ def bci_worker_process(pipeline: BCIPipeline, input_queue: multiprocessing.Queue
             if window is None: # Forward the EOF sentinel
                 output_queue.put(None)
                 break
+            t_start = time.perf_counter()
             probabilities = pipeline.process_window(window)
+            t_end = time.perf_counter()
+
             output_queue.put({
                 "probabilities": probabilities, 
-                "ground_truth": window.ground_truth
+                "ground_truth": window.ground_truth,
+                "latency": t_end - t_start
             })
         except Exception as e:
             print(f"Non-Fatal Exception in Processing Thread: {e}")

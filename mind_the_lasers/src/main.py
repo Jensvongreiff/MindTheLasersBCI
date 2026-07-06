@@ -64,7 +64,7 @@ def main():
     streamer.start()
 
     unified_ctrl = UnifiedController(
-        bci_controller=BCIController(output_queue, SmoothingController()), 
+        bci_controller=BCIController(output_queue, SmoothingController(), baseline_name=args.baseline), 
         keyboard_controller=KeyboardController()
     )
 

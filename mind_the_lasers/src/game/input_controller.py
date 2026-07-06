@@ -3,6 +3,7 @@ import queue
 import multiprocessing
 from enum import Enum
 from mind_the_lasers.src.pipeline.smoothing import SmoothingController
+from mind_the_lasers.src.pipeline.decoder_metrics import DecoderEvaluator
 
 class Command(Enum):
     LEFT = -1
@@ -20,49 +21,45 @@ class KeyboardController:
 
 class BCIController:
     """Interacts with the BCI Pipeline and performs automated offline evaluations."""
-    def __init__(self, output_queue: multiprocessing.Queue, smoothing_controller: SmoothingController):
+    def __init__(self, output_queue: multiprocessing.Queue, smoothing_controller: SmoothingController, baseline_name: str = "pipeline"):
         self.output_queue = output_queue
         self.smoothing = smoothing_controller
+        self.evaluator = DecoderEvaluator()
+        self.baseline_name = baseline_name
         self.current_command = Command.REST
-        self.y_true, self.y_pred = [], []
         self._map = {"left": Command.LEFT, "right": Command.RIGHT, "rest": Command.REST}
 
     def get_command(self) -> Command:
-        latest_data = False
         while True:
             try:
                 msg = self.output_queue.get_nowait()
                 if msg is None: # Catch the EOF sentinel
-                    self._generate_report()
+                    self.evaluator.generate_report(self.baseline_name)
                     pygame.event.post(pygame.event.Event(pygame.QUIT))
                     return Command.NONE
-                latest_data = msg
-            except queue.Empty:
-                break
                 
-        if latest_data:
-            smoothed_str = self.smoothing.process(latest_data["probabilities"])
-            self.current_command = self._map.get(smoothed_str, Command.REST)
+                # PROCESS AND LOG EVERY BCI WINDOW IN THE QUEUE
+                smoothed_str, max_conf, was_rejected = self.smoothing.process(msg["probabilities"])
+                
+                # Continuously update the current command; the loop will exit with the absolute latest.
+                self.current_command = self._map.get(smoothed_str, Command.REST)
 
-            # Automated evaluation logic
-            truth = latest_data.get("ground_truth")
-            if truth:
-                self.y_true.append(truth)
-                self.y_pred.append(smoothed_str)
+                # Log the metric for this specific window
+                truth = msg.get("ground_truth")
+                if truth:
+                    latency = msg.get("latency", 0.0)
+                    self.evaluator.log_step(
+                        truth=truth,
+                        pred=smoothed_str,
+                        confidence=max_conf,
+                        rejected=was_rejected,
+                        latency=latency
+                    )
 
+            except queue.Empty:
+                break # Queue is fully processed
+                
         return self.current_command
-
-    def _generate_report(self):
-        if not self.y_true:
-            return
-
-        from sklearn.metrics import confusion_matrix, classification_report
-
-        print("\n" + "=" * 40 + "\nOFFLINE SIMULATION METRICS REPORT\n" + "=" * 40)
-        print(classification_report(self.y_true, self.y_pred, target_names=["left", "rest", "right"]))
-        print("Confusion Matrix:")
-        print(confusion_matrix(self.y_true, self.y_pred, labels=["left", "rest", "right"]))
-        print("=" * 40 + "\n")
 
 class UnifiedController:
     def __init__(self, bci_controller: BCIController, keyboard_controller: KeyboardController):
