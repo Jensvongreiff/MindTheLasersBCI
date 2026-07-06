@@ -6,8 +6,13 @@ from mind_the_lasers.src.game.level import make_levels
 from mind_the_lasers.src.game.input_controller import KeyboardController
 
 
+def main():
+    game = Game()
+    game.run()
+
+
 class Game:
-    def __init__(self):
+    def __init__(self, controller = KeyboardController()):
         pygame.init()
 
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -18,7 +23,7 @@ class Game:
         self.big_font = pygame.font.SysFont(None, 72)
 
         self.player = Player()
-        self.controller = KeyboardController()
+        self.controller = controller
 
         self.levels = make_levels()
         self.level_index = 0
@@ -175,7 +180,6 @@ class Game:
 
         for laser in self.level.lasers:
             laser.draw(self.screen)
-            
 
         self.player.draw(self.screen)
         self.draw_hud()
@@ -184,3 +188,7 @@ class Game:
             self.draw_game_over()
 
         pygame.display.flip()
+
+
+if __name__ == "__main__":
+    main()
