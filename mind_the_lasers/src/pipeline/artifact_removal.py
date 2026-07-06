@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Optional, Sequence, Union
 import numpy as np
-from signal import EEGWindow
+from .signal import EEGWindow
 
 
 class BaseArtifactRemoval(ABC):
@@ -225,5 +225,6 @@ class SpatialFilterICA(BaseArtifactRemoval):
             data=cleaned_raw.get_data(),
             sampling_rate=window.sampling_rate,
             timestamp=window.timestamp,
+            ground_truth=window.ground_truth,
             is_artifact_free=True,
         )
