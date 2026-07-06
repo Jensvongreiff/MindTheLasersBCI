@@ -2,7 +2,6 @@ import pygame
 import queue
 import multiprocessing
 from enum import Enum
-from sklearn.metrics import confusion_matrix, classification_report
 from mind_the_lasers.src.pipeline.smoothing import SmoothingController
 
 class Command(Enum):
@@ -54,12 +53,16 @@ class BCIController:
         return self.current_command
 
     def _generate_report(self):
-        if not self.y_true: return
-        print("\n" + "="*40 + "\nOFFLINE SIMULATION METRICS REPORT\n" + "="*40)
+        if not self.y_true:
+            return
+
+        from sklearn.metrics import confusion_matrix, classification_report
+
+        print("\n" + "=" * 40 + "\nOFFLINE SIMULATION METRICS REPORT\n" + "=" * 40)
         print(classification_report(self.y_true, self.y_pred, target_names=["left", "rest", "right"]))
         print("Confusion Matrix:")
         print(confusion_matrix(self.y_true, self.y_pred, labels=["left", "rest", "right"]))
-        print("="*40 + "\n")
+        print("=" * 40 + "\n")
 
 class UnifiedController:
     def __init__(self, bci_controller: BCIController, keyboard_controller: KeyboardController):

@@ -21,7 +21,8 @@ dependencies = [
     "pyqt5>=5.15.11",
     "pyqt5-qt5<5.15.11",
     "torch",
-    "pygame"
+    "pygame",
+    "pylsl"
 ]
 
 [tool.uv.sources]

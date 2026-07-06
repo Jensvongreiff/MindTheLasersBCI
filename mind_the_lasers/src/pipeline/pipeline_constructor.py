@@ -27,7 +27,7 @@ class BCIPipeline:
             self.feature_step = feature_step
             self.classifier_step = classifier_step
 
-    def calibrate(self, X_train, y_train):
+    def calibrate(self, X_train, y_train, sampling_rate: float | None = None):
         """Fits the pipeline models given an analytical offline training set."""
         print(f"\nCalibrating Pipeline on Dataset: {X_train.shape}...")
         
@@ -40,8 +40,8 @@ class BCIPipeline:
         if self.model_path == 'end_to_end':
             self.end_to_end_model.fit(X_train, y_train)
         else:
-            self.feature_step.fit(X_train, y_train)
-            features = self.feature_step.transform(X_train)
+            self.feature_step.fit(X_train, y_train, sampling_rate=sampling_rate)
+            features = self.feature_step.transform(X_train, sampling_rate=sampling_rate)
             self.classifier_step.fit(features, y_train)
         print("Calibration successful. Weights serialized.")
 
