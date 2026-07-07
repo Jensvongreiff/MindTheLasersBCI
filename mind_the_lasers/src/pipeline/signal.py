@@ -168,6 +168,7 @@ class EEGDataLoaderOffline:
         self.channel_labels = None
         self.epochs = None
         self.filtered_events_id = None
+        self.sampling_rate = None
 
         if events is not None:
             self.events = events
@@ -461,6 +462,7 @@ class EEGDataLoaderOffline:
         self.raw_data = raw_data
         self.markers = markers
         self.channel_labels = channel_labels
+        self.sampling_rate = sfreq
 
     def get_epochs(
         self,
@@ -631,6 +633,8 @@ class EEGDataLoaderOffline:
             raw_data=self.raw_data,
             markers=self.markers,
             event_dict=event_dict,
+            tmin=0.3,
+            tmax=3.3,
         )
 
         if self.epochs is None or len(self.epochs) == 0:
