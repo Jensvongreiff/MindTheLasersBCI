@@ -7,18 +7,14 @@ from input_controller import KeyboardController, UDPController
 
 
 class Game:
-    def __init__(self):
-        pygame.init()
+    def __init__(self, screen, controller):
+        self.screen = screen
+        self.controller = controller
 
-        self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
-        pygame.display.set_caption("Mind the Lasers")
-
-        self.clock = pygame.time.Clock()
         self.font = pygame.font.SysFont(None, 36)
         self.big_font = pygame.font.SysFont(None, 72)
 
         self.player = Player()
-        self.controller = UDPController()  
 
         self.levels = make_levels()
         self.level_index = 0
@@ -29,6 +25,8 @@ class Game:
     def load_level(self):
         self.level = self.levels[self.level_index]
         self.level.reset_player(self.player)
+        self.player.direction = 0
+        self.controller.reset()
 
     def restart_game(self):
         self.level_index = 0
@@ -58,11 +56,16 @@ class Game:
         pygame.quit()
 
     def update(self, dt):
+        if self.game_over:
+            return
+
         self.controller.update()
+
         command = self.controller.get_command()
 
         self.player.process_command(command)
         self.player.update(dt)
+
         self.level.update(dt)
 
         for laser in self.level.lasers:
@@ -71,13 +74,18 @@ class Game:
 
         if self.player.lives <= 0:
             self.game_over = True
+            self.player.direction = 0
+            self.controller.reset()
             return
 
         if self.level.completed(self.player):
             self.level_index += 1
 
             if self.level_index >= len(self.levels):
-                self.level_index = 0
+                self.game_over = True
+                self.player.direction = 0
+                self.controller.reset()
+                return
 
             self.load_level()
 
