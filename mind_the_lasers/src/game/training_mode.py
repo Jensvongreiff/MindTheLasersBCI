@@ -1,11 +1,11 @@
 import pygame
 
-from input_controller import Command
-from player import Player
-from settings import *
+from mind_the_lasers.src.game.input_controller import Command
+from mind_the_lasers.src.game.player import Player
+from mind_the_lasers.src.game.settings import *
 
-from training_logger import TrainingLogger
-from training_trial import TrainingTrial
+from mind_the_lasers.src.game.training_logger import TrainingLogger
+from mind_the_lasers.src.game.training_trial import TrainingTrial
 
 
 class TrainingMode:

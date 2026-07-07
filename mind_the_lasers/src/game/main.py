@@ -1,10 +1,10 @@
 import pygame
 
-from settings import *
-from game import Game
-from mode_select import ModeSelect
-from training_mode import TrainingMode
-from input_controller import UDPController
+from mind_the_lasers.src.game.settings import *
+from mind_the_lasers.src.game.game import Game
+from mind_the_lasers.src.game.mode_select import ModeSelect
+from mind_the_lasers.src.game.training_mode import TrainingMode
+from mind_the_lasers.src.game.input_controller import UDPController
 
 
 def main():
