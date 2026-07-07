@@ -3,7 +3,8 @@ import pygame
 from settings import *
 from player import Player
 from level import make_levels
-from input_controller import KeyboardController, UDPController
+from game_metrics import GameMetrics
+from input_controller import KeyboardController, UDPController, Command
 
 
 class Game:
@@ -17,6 +18,15 @@ class Game:
         self.player = Player()
 
         self.levels = make_levels()
+
+        self.metrics = GameMetrics(
+            total_levels=len(self.levels)
+        )
+
+        self.summary_ready = False
+
+        self.previous_command = Command.NONE
+
         self.level_index = 0
         self.game_over = False
 
@@ -24,9 +34,14 @@ class Game:
 
     def load_level(self):
         self.level = self.levels[self.level_index]
+
         self.level.reset_player(self.player)
+
         self.player.direction = 0
+
         self.controller.reset()
+
+        self.previous_command = Command.NONE
 
     def restart_game(self):
         self.level_index = 0
@@ -63,28 +78,57 @@ class Game:
 
         command = self.controller.get_command()
 
+        # Only count a command when the persistent game command changes.
+        if command != self.previous_command:
+            self.metrics.record_command(command)
+            self.previous_command = command
+
+        self.metrics.record_movement_time(
+            command=command,
+            goal_direction=self._goal_direction(),
+            dt=dt,
+        )
+
+        # Detect a newly activated boost.
+        was_boosted = self._player_is_boosted()
+
         self.player.process_command(command)
+
+        is_boosted = self._player_is_boosted()
+
+        if is_boosted and not was_boosted:
+            self.metrics.record_boost_used()
+
         self.player.update(dt)
 
         self.level.update(dt)
 
+        self._record_laser_metrics()
+
         for laser in self.level.lasers:
             if laser.collides(self.player):
+                self.metrics.record_collision(
+                    laser,
+                    boosted=self._player_is_boosted(),
+                )
+
                 self.player.hit()
 
         if self.player.lives <= 0:
-            self.game_over = True
-            self.player.direction = 0
-            self.controller.reset()
+            self._finish_game()
             return
 
         if self.level.completed(self.player):
+            next_level_number = self.level_index + 2
+
+            self.metrics.record_level_completed(
+                next_level_number=next_level_number,
+            )
+
             self.level_index += 1
 
             if self.level_index >= len(self.levels):
-                self.game_over = True
-                self.player.direction = 0
-                self.controller.reset()
+                self._finish_game()
                 return
 
             self.load_level()
@@ -193,3 +237,155 @@ class Game:
             self.draw_game_over()
 
         pygame.display.flip()
+
+
+    def draw_summary(self):
+        self.screen.fill(BG_COLOR)
+
+        summary = self.metrics.get_summary()
+
+        title = self.big_font.render(
+            "GAME SUMMARY",
+            True,
+            (255, 255, 255),
+        )
+
+        self.screen.blit(
+            title,
+            title.get_rect(center=(WIDTH // 2, 70)),
+        )
+
+        lines = [
+            (
+                f"Highest Level Reached: "
+                f"{summary['highest_level_reached']}"
+                f"/{summary['total_levels']}"
+            ),
+            (
+                f"Levels Completed: "
+                f"{summary['levels_completed']}"
+            ),
+            (
+                f"Play Time: "
+                f"{summary['total_play_time']:.1f} s"
+            ),
+            (
+                f"Average Level Time: "
+                f"{summary['average_level_time']:.1f} s"
+            ),
+            (
+                f"Laser Avoidances: "
+                f"{summary['successful_avoidances']}"
+                f"/{summary['laser_encounters']} "
+                f"({summary['avoidance_rate'] * 100:.1f}%)"
+            ),
+            (
+                f"Collisions: "
+                f"{summary['collisions']}"
+            ),
+            (
+                f"Command Transitions: "
+                f"{summary['command_transitions']}"
+            ),
+            (
+                f"Effective Movement: "
+                f"{summary['effective_movement_ratio'] * 100:.1f}%"
+            ),
+            (
+                f"Time Resting: "
+                f"{summary['time_resting']:.1f} s"
+            ),
+            (
+                f"Boosts Used: "
+                f"{summary['boosts_used']}"
+            ),
+            (
+                f"Boosted Collisions: "
+                f"{summary['boosted_collisions']}"
+            ),
+        ]
+
+        y = 140
+
+        for text in lines:
+            rendered = self.font.render(
+                text,
+                True,
+                (230, 230, 230),
+            )
+
+            self.screen.blit(
+                rendered,
+                rendered.get_rect(center=(WIDTH // 2, y)),
+            )
+
+            y += 38
+
+        prompt = self.font.render(
+            "Press ENTER to return to menu",
+            True,
+            (200, 200, 200),
+        )
+
+        self.screen.blit(
+            prompt,
+            prompt.get_rect(
+                center=(WIDTH // 2, HEIGHT - 40)
+            ),
+        )
+
+
+    def _goal_direction(self):
+        if self.level.goal_x > self.level.start_x:
+            return 1
+
+        return -1
+
+
+    def _player_is_boosted(self):
+        return self.player.speed > self.player.base_speed
+
+
+    def _record_laser_metrics(self):
+        goal_direction = self._goal_direction()
+
+        for laser in self.level.lasers:
+            laser_id = id(laser)
+
+            # The player has reached/passed the laser position
+            # while traveling toward the goal.
+            if goal_direction == 1:
+                reached_laser = self.player.x >= laser.x
+            else:
+                reached_laser = self.player.x <= laser.x
+
+            if reached_laser:
+                self.metrics.record_laser_encounter(laser)
+
+            # Once the player has moved fully beyond the laser,
+            # count it as an avoidance if no collision occurred.
+            if goal_direction == 1:
+                passed_laser = (
+                    self.player.x - BALL_RADIUS
+                    > laser.x + laser.beam_width // 2
+                )
+            else:
+                passed_laser = (
+                    self.player.x + BALL_RADIUS
+                    < laser.x - laser.beam_width // 2
+                )
+
+            if passed_laser:
+                self.metrics.record_avoidance(laser)
+
+
+    def _finish_game(self):
+        self.game_over = True
+
+        self.player.direction = 0
+        self.controller.reset()
+
+        self.metrics.stop_timer()
+        self.metrics.save()
+
+        self.summary_ready = True

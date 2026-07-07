@@ -62,6 +62,16 @@ def main():
                     training_mode = None
                     current_mode = "menu"
 
+                if (
+                    current_mode == "play"
+                    and game is not None
+                    and game.game_over
+                    and event.key == pygame.K_RETURN
+                ):
+                    game = None
+                    controller.reset()
+                    current_mode = "menu"
+
             if current_mode == "menu":
                 selected_mode = mode_select.handle_event(event)
 
@@ -94,13 +104,11 @@ def main():
             training_mode.draw()
 
         elif current_mode == "play":
-            game.update(dt)
-            game.draw()
-
             if game.game_over:
-                game = None
-                controller.reset()
-                current_mode = "menu"
+                game.draw_summary()
+            else:
+                game.update(dt)
+                game.draw()
 
         pygame.display.flip()
 
