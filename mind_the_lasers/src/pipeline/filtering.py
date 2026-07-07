@@ -28,6 +28,9 @@ class IIRBandpassFilter(BaseFilter):
         # Apply the filter along the time axis (axis=1)
         filtered_data = lfilter(self.b, self.a, window.data, axis=1)
         
+        # Common Average Reference (CAR) is applied after filtering
+        filtered_data = filtered_data - filtered_data.mean(axis=0, keepdims=True)
+        
         # Return a new window object to prevent mutability bugs
         return EEGWindow(
         data=filtered_data,

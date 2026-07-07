@@ -76,6 +76,8 @@ def main():
 
         X_train, X_test, y_train, y_test = data_loader.load_data()
 
+        pipeline.data_loader = data_loader
+
         pipeline.calibrate(
             X_train,
             y_train,
