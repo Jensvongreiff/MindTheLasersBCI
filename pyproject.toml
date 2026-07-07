@@ -22,7 +22,8 @@ dependencies = [
     "pyqt5-qt5<5.15.11",
     "torch",
     "pygame",
-    "pylsl"
+    "pylsl",
+    "mne_icalabel"
 ]
 
 [tool.uv.sources]
