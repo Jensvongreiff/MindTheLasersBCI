@@ -1,7 +1,7 @@
 #Logic for Daniels output command smoothing
 
 import collections
-from typing import Dict
+from typing import Dict, Tuple
 
 class SmoothingController:
     """
@@ -17,14 +17,16 @@ class SmoothingController:
         for _ in range(window_size):
             self.buffer.append("rest")
 
-    def process(self, probabilities: Dict[str, float]) -> str:
+    def process(self, probabilities: Dict[str, float]) -> Tuple[str, float, bool]:
         # Identify the class with the maximum probability
         max_class = max(probabilities, key=probabilities.get)
         max_prob = probabilities[max_class]
 
+        was_rejected = False
         # Apply confidence thresholding: fallback to 'rest' if uncertain
         if max_prob < self.confidence_threshold:
             prediction = "rest"
+            was_rejected = True
         else:
             prediction = max_class
 
@@ -35,4 +37,4 @@ class SmoothingController:
         vote_counts = collections.Counter(self.buffer)
         majority_class = vote_counts.most_common(1)[0][0]
 
-        return majority_class
+        return majority_class, max_prob, was_rejected
