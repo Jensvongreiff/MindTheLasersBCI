@@ -5,7 +5,7 @@ from .feature_extraction import CSPWrapper
 from .model import EEGNetBCIWrapper, LDAWrapper
 
 
-def build_pipeline(baseline: str, window_samples: int):
+def build_pipeline(baseline: str, window_samples: int, suffix: str = "") -> BCIPipeline:
     """
     Builds a calibrated BCIPipeline.
 
@@ -18,18 +18,19 @@ def build_pipeline(baseline: str, window_samples: int):
 
     base_dir = os.path.dirname(__file__)
 
+    # Format the suffix for the file names (e.g., "_0001")
+    ext = f"_{suffix}" if suffix else ""    
+
     if baseline == "eegnet":
 
         weights_path = os.path.join(
             base_dir,
             "weights",
-            "eegnet.pt",
+            f"eegnet{ext}.pt",
         )
 
         model = EEGNetBCIWrapper(
             weights_path=weights_path,
-            n_channels=22,
-            n_samples=window_samples,
         )
 
         return BCIPipeline(
@@ -39,13 +40,13 @@ def build_pipeline(baseline: str, window_samples: int):
     csp_path = os.path.join(
         base_dir,
         "weights",
-        "csp.pkl",
+        f"csp{ext}.pkl",
     )
 
     lda_path = os.path.join(
         base_dir,
         "weights",
-        "lda.pkl",
+        f"lda{ext}.pkl",
     )
 
     return BCIPipeline(

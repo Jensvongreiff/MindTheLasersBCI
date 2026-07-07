@@ -21,7 +21,7 @@ class DecoderEvaluator:
         self.rejections.append(rejected)
         self.latencies.append(latency)
 
-    def generate_report(self, baseline_name: str) -> Dict[str, Any]:
+    def generate_report(self, baseline_name: str, save: bool = True) -> Dict[str, Any]:
         if not self.y_true:
             return {}
 
@@ -84,10 +84,11 @@ class DecoderEvaluator:
             "decision_latency": latency_stats
         }
 
-        os.makedirs("reports", exist_ok=True)
-        filepath = os.path.join("reports", f"decoder_metrics_{baseline_name}.json")
-        with open(filepath, "w") as f:
-            json.dump(metrics, f, indent=4)
-        print(f"\n[Metrics] Offline simulation report exported to {filepath}")
+        if save:
+            os.makedirs("mind_the_lasers/reports", exist_ok=True)
+            filepath = os.path.join("mind_the_lasers/reports", f"decoder_metrics_{baseline_name}.json")
+            with open(filepath, "w") as f:
+                json.dump(metrics, f, indent=4)
+            print(f"\n[Metrics] Offline simulation report exported to {filepath}")
         
         return metrics
