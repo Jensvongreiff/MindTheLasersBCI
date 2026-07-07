@@ -1,2 +1,0 @@
-timestamp,highest_level_reached,levels_completed,total_levels,total_play_time,average_level_time,laser_encounters,successful_avoidances,avoidance_rate,collisions,accepted_commands,command_transitions,time_moving_toward_goal,time_moving_away_from_goal,time_resting,effective_movement_ratio,boosts_used,boosted_collisions
-2026-07-07T14:46:11.497373,9,8,30,27.4129,3.2447,10,6,0.6,5,12,8,22.005,5.462,0.0,0.8011,0,0

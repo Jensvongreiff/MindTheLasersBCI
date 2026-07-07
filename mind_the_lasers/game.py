@@ -39,6 +39,9 @@ class Game:
 
         self.player.direction = 0
 
+        if RESET_LIVES_EVERY_LEVEL:
+            self.player.reset_lives()
+
         self.controller.reset()
 
         self.previous_command = Command.NONE
