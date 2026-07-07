@@ -3,7 +3,7 @@ HEIGHT = 600
 FPS = 60
 
 BALL_RADIUS = 18
-BALL_SPEED = 320 #100 is a good number
+BALL_SPEED = 140 #100 is a good number
 
 MAX_LIVES = 5
 RESET_LIVES_EVERY_LEVEL = True

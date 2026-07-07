@@ -1,84 +1,174 @@
 import argparse
-import multiprocessing
+import subprocess
 import sys
-import os
+import time
+from pathlib import Path
 
-from mind_the_lasers.src.game.game import Game
-from mind_the_lasers.src.game.input_controller import KeyboardController, BCIController, UnifiedController
-from mind_the_lasers.src.pipeline.smoothing import SmoothingController
-from mind_the_lasers.src.pipeline.feature_extraction import CSPWrapper
-from mind_the_lasers.src.pipeline.model import EEGNetBCIWrapper, LDAWrapper
-from mind_the_lasers.src.pipeline.pipeline_constructor import BCIPipeline, bci_worker_process
-from mind_the_lasers.src.pipeline.signal import LSLStreamer, OfflineStreamer, load_and_split_offline_data
-
-def setup_pipeline(baseline: str, window_samples: int):
-    base_dir = os.path.dirname(__file__)
-    
-    if baseline == 'eegnet':
-        weights_path = os.path.join(base_dir, 'pipeline', 'weights', 'eegnet.pt')
-        model = EEGNetBCIWrapper(weights_path=weights_path, n_channels=22, n_samples=window_samples)
-        return BCIPipeline(end_to_end_model=model)
-    else:
-        csp_path = os.path.join(base_dir, 'pipeline', 'weights', 'csp.pkl')
-        lda_path = os.path.join(base_dir, 'pipeline', 'weights', 'lda.pkl')
-        return BCIPipeline(
-            feature_step=CSPWrapper(model_path=csp_path),
-            classifier_step=LDAWrapper(model_path=lda_path)
-        )
 
 def main():
-    parser = argparse.ArgumentParser(description="Mind The Lasers: BCI Integration Runner")
-    parser.add_argument('--mode', choices=['live', 'offline'], default='live', help="Data ingestion paradigm.")
-    parser.add_argument('--baseline', choices=['eegnet', 'csp-lda'], default='eegnet', help="Underlying classification logic.")
-    parser.add_argument('--dataset', type=str, help="Absolute path to BCI2a .mat file (Required if --mode offline).")
+
+    parser = argparse.ArgumentParser(
+        description="Mind the Lasers"
+    )
+
+    parser.add_argument(
+        "--mode",
+        choices=["live", "offline"],
+        default="live",
+        help="Pipeline mode.",
+    )
+
+    parser.add_argument(
+        "--baseline",
+        choices=["csp-lda", "eegnet"],
+        default="csp-lda",
+    )
+
+    parser.add_argument(
+        "--xdf",
+        type=str,
+        help="Offline XDF replay (required only for offline mode).",
+    )
+
+    parser.add_argument(
+        "--ip",
+        default="127.0.0.1",
+    )
+
+    parser.add_argument(
+        "--port",
+        default="5005",
+    )
+
+    parser.add_argument(
+        "--controller",
+        choices=["pipeline", "keyboard", "both"],
+        default="pipeline",
+        help="Input source for the game.",
+    )
+
     args = parser.parse_args()
 
-    fs = 250
-    window_samples = int(fs * 1.0) # 1-second dynamic window processing
-    
-    input_queue = multiprocessing.Queue(maxsize=1) 
-    output_queue = multiprocessing.Queue(maxsize=1)
+    root = Path(__file__).resolve().parents[2]
 
-    pipeline = setup_pipeline(args.baseline, window_samples)
-    streamer = None
-
-    if args.mode == 'offline':
-        if not args.dataset:
-            print("ERROR: --dataset path is strictly required for offline simulation.")
-            sys.exit(1)
-            
-        print(f"Initiating Offline BCI Simulation. Parsing {args.dataset}...")
-        X_train, X_test, y_train, y_test = load_and_split_offline_data(args.dataset, fs)
-        pipeline.calibrate(X_train, y_train)
-        
-        streamer = OfflineStreamer(X_test, y_test, input_queue, window_samples, fs)
-    else:
-        streamer = LSLStreamer(input_queue, window_samples, fs=fs)
-        
-    worker_proc = multiprocessing.Process(
-        target=bci_worker_process, 
-        args=(pipeline, input_queue, output_queue),
-        daemon=True
-    )
-    worker_proc.start()
-    streamer.start()
-
-    unified_ctrl = UnifiedController(
-        bci_controller=BCIController(output_queue, SmoothingController(), baseline_name=args.baseline), 
-        keyboard_controller=KeyboardController()
-    )
+    processes = []
 
     try:
-        print("Launching Mind The Lasers Environment...")
-        game = Game(controller=unified_ctrl) 
-        game.run()
+
+        # ---------------------------------------------------------
+        # Offline replay
+        # ---------------------------------------------------------
+
+        if args.mode == "offline":
+
+            if args.xdf is None:
+                parser.error("--xdf is required in offline mode.")
+
+            streamer = subprocess.Popen(
+                [
+                    sys.executable,
+                    "-m",
+                    "mind_the_lasers.src.stream.streamer",
+                    args.xdf,
+                ]
+            )
+
+            processes.append(streamer)
+
+            print("Started XDF streamer.")
+
+            time.sleep(2)
+
+        # ---------------------------------------------------------
+        # Pipeline
+        # ---------------------------------------------------------
+
+        if args.controller in ("pipeline", "both"):
+
+            pipeline = subprocess.Popen(
+                [
+                    sys.executable,
+                    "-m",
+                    "mind_the_lasers.src.pipeline.run_pipeline",
+                    "--mode",
+                    "live",
+                    "--baseline",
+                    args.baseline,
+                    "--ip",
+                    args.ip,
+                    "--port",
+                    args.port,
+                ]
+            )
+
+            processes.append(pipeline)
+
+            print("Started pipeline.")
+
+            time.sleep(2)
+
+        # ---------------------------------------------------------
+        # Keyboard prediction sender
+        # ---------------------------------------------------------
+
+        if args.controller in ("keyboard", "both"):
+
+            keyboard = subprocess.Popen(
+                [
+                    sys.executable,
+                    "-m",
+                    "mind_the_lasers.src.stream.key_press",
+                    "--ip",
+                    args.ip,
+                    "--port",
+                    args.port,
+                ]
+            )
+
+            processes.append(keyboard)
+
+            print("Started keyboard sender.")
+
+            time.sleep(1)
+
+        # ---------------------------------------------------------
+        # Game
+        # ---------------------------------------------------------
+
+        game = subprocess.Popen(
+            [
+                sys.executable,
+                "-m",
+                "mind_the_lasers.src.game.run_game",
+            ]
+        )
+
+        processes.append(game)
+
+        print("Started game.")
+
+        game.wait()
+
+    except KeyboardInterrupt:
+
+        print("\nStopping...")
+
     finally:
-        print("Commencing Graceful Shutdown Protocols...")
-        streamer.stop()
-        if args.mode == 'live':
-            input_queue.put(None) 
-        worker_proc.join(timeout=2)
-        sys.exit(0)
+
+        for p in reversed(processes):
+
+            if p.poll() is None:
+
+                p.terminate()
+
+        for p in reversed(processes):
+
+            try:
+                p.wait(timeout=2)
+
+            except subprocess.TimeoutExpired:
+                p.kill()
+
 
 if __name__ == "__main__":
     main()

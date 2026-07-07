@@ -13,9 +13,9 @@ The project focuses on building a robust, real-time data processing pipeline tha
 
 The game utilizes a strictly three-class paradigm mapped to discrete movements:
 
-* **Left Motor Imagery:** Steer Left
-* **Right Motor Imagery:** Steer Right
-* **Rest (Idle):** Break / Charge Boost
+* **Left Motor Imagery:** Move Left
+* **Right Motor Imagery:** Move Right
+* **Rest (Idle):** Stop And Charge Boost
 
 ### Coping with Imperfect BCI
 
@@ -51,48 +51,145 @@ Raw probabilities generated every 100ms are too volatile for continuous runner m
 
 ## 4. Repository Structure
 
-```text
 mind_the_lasers/
 │
 ├── src/
-│   ├── main.py                     # Entry point and CLI argument parser
+│   ├── main.py                     # Launches streamer, pipeline and/or game
 │   │
-│   ├── game/                       # Pygame Mechanics
-│   │   ├── game.py                 # Core rendering and state loop
-│   │   ├── input_controller.py     # Keyboard vs BCI state arbitration & offline metric tracking
-│   │   ├── player.py               # Player kinematics
-│   │   ├── laser.py                # Obstacle generation logic
-│   │   ├── level.py                # Track progression mapping
+│   ├── game/
+│   │   ├── run_game.py             # Game entry point
+│   │   ├── game.py                 # Main game loop
+│   │   ├── input_controller.py     # UDP controller and command definitions
+│   │   ├── player.py               # Player movement, boost and lives
+│   │   ├── laser.py                # Sweeping laser obstacle implementation
+│   │   ├── level.py                # Level definitions and progression
+│   │   ├── levels.py               # Collection of game levels
+│   │   ├── game_metrics.py         # Gameplay metrics and logging
+│   │   ├── training.py             # Training mode implementation
+│   │   ├── training_logger.py      # Training trial logging
+|   |   ├── training_trial.py       # Training trials implementation
 │   │   └── settings.py             # Global constants
+│   │ 
 │   │
-│   └── pipeline/                   # BCI Processing Core
-│       ├── signal.py               # LSL, Offline Streamers, and EEGWindow dataclass
-│       ├── filtering.py            # Causal IIR Bandpass implementations
-│       ├── artifact_removal.py     # MNE ICA abstraction
-│       ├── feature_extraction.py   # CSP wrapper
-│       ├── model.py                # EEGNet architecture and LDA wrapper
-│       ├── smoothing.py            # Stabilizer (Thresholding + Majority Vote)
-│       ├── pipeline_constructor.py # Multiprocessing worker and pipeline orchestration
-│       └── weights/                # Serialized .pt and .pkl subject-specific weights
-
-```
+│   ├── pipeline/
+│   │   ├── run_pipeline.py         # Pipeline entry point
+│   │   ├── pipeline_config.py      # Pipeline construction and model loading
+│   │   ├── prediction_sender.py    # Sends decoded predictions over UDP
+│   │   ├── signal.py               # LSL streamers and EEGWindow dataclass
+│   │   ├── filtering.py            # Online filtering
+│   │   ├── artifact_removal.py     # Artifact removal
+│   │   ├── feature_extraction.py   # CSP wrapper
+│   │   ├── model.py                # EEGNet and LDA wrappers
+│   │   ├── smoothing.py            # Prediction smoothing / majority voting
+│   │   ├── decoder_metrics.py      # Decoder evaluation metrics
+│   │   ├── pipeline_constructor.py # BCIPipeline and worker process
+│   │   └── weights/
+│   │       ├── csp.pkl
+│   │       ├── lda.pkl
+│   │       └── eegnet.pt
+│   │
+│   └── stream/
+│       ├── streamer.py             # Replays XDF recordings as LSL streams
+│       └── key_press.py            # Keyboard prediction sender (UDP)
+│
+├── training_logs/
+├── game_logs/
+├── README.md
 
 ## 5. Execution Logic
 
-The system is controlled via a command-line interface in `main.py`.
+The project can be launched either through a single entry point (`src/main.py`) or by starting each component independently for debugging and development.
 
-**1. Live Hardware Session:**
-Executes the game using the LSL stream. Requires pre-calibrated weights in the `pipeline/weights/` directory.
+### Main Entry Point
 
-```bash
-python mind_the_lasers/src/main.py --mode live --baseline eegnet
-
-```
-
-**2. Automated Offline Validation:**
-Performs an end-to-end simulation. It parses the provided `.mat` dataset, splits it 50/50, dynamically fits the chosen baseline to the training half, and streams the test half into the Pygame window. Upon completion, it outputs a detailed `classification_report` and `confusion_matrix`.
+The entire system is launched through:
 
 ```bash
-python mind_the_lasers/src/main.py --mode offline --dataset /path/to/A01T.mat --baseline csp-lda
-
+python -m mind_the_lasers.src.main
 ```
+
+The following command-line arguments are available:
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `--mode` | Data source: `live` (LSL stream) or `offline` (XDF replay) | `live` |
+| `--controller` | Input source: `pipeline`, `keyboard`, or `both` | `pipeline` |
+| `--baseline` | Classifier backend: `csp-lda` or `eegnet` | `csp-lda` |
+| `--xdf` | Path to an XDF recording (required only in offline mode) | — |
+| `--ip` | UDP destination IP | `127.0.0.1` |
+| `--port` | UDP destination port | `5005` |
+
+### Example Usage
+
+**Live BCI session**
+
+Uses an existing LSL EEG stream.
+
+```bash
+python -m mind_the_lasers.src.main \
+    --mode live \
+    --controller pipeline \
+    --baseline csp-lda
+```
+
+**Offline replay from an XDF recording**
+
+Replays a previously recorded session while running the classifier and the game.
+
+```bash
+python -m mind_the_lasers.src.main \
+    --mode offline \
+    --xdf /path/to/recording.xdf
+```
+
+**Keyboard-only control**
+
+Useful for testing gameplay without running the pipeline.
+
+```bash
+python -m mind_the_lasers.src.main \
+    --controller keyboard
+```
+
+**Keyboard and pipeline simultaneously**
+
+Useful for debugging while allowing manual override.
+
+```bash
+python -m mind_the_lasers.src.main \
+    --controller both
+```
+
+---
+
+### Running Individual Processes
+
+For debugging, each component can also be started independently.
+
+#### 1. Replay an XDF recording as an LSL stream
+
+```bash
+python -m mind_the_lasers.src.stream.streamer /path/to/recording.xdf
+```
+
+#### 2. Run the BCI pipeline
+
+```bash
+python -m mind_the_lasers.src.pipeline.run_pipeline \
+    --mode live \
+    --baseline csp-lda
+```
+
+#### 3. Launch the game
+
+```bash
+python -m mind_the_lasers.src.game.run_game
+```
+
+#### 4. Send manual keyboard predictions
+
+```bash
+python -m mind_the_lasers.src.stream.key_press
+```
+
+This modular execution allows each subsystem (streaming, classification, communication, and gameplay) to be tested independently before performing a full end-to-end experiment.
