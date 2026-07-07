@@ -1,4 +1,4 @@
-from laser import SweepingLaser
+from mind_the_lasers.src.game.laser import SweepingLaser
 
 
 class Level:
