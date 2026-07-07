@@ -9,7 +9,7 @@ from .prediction_sender import PredictionSender
 from .signal import (
     LSLStreamer,
     OfflineStreamer,
-    load_and_split_offline_data,
+    EEGDataLoaderOffline,
 )
 from .smoothing import SmoothingController
 
@@ -35,7 +35,7 @@ def main():
     parser.add_argument(
         "--dataset",
         type=str,
-        help="Offline .mat dataset",
+        help="Offline .xdf dataset",
     )
 
     parser.add_argument(
@@ -72,12 +72,9 @@ def main():
 
         print("Loading dataset...")
 
-        X_train, X_test, y_train, y_test = (
-            load_and_split_offline_data(
-                args.dataset,
-                fs,
-            )
-        )
+        data_loader = EEGDataLoaderOffline(data_path=args.dataset)
+
+        X_train, X_test, y_train, y_test = data_loader.load_data()
 
         pipeline.calibrate(
             X_train,
