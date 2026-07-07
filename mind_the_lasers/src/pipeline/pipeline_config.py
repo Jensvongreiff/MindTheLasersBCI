@@ -28,8 +28,6 @@ def build_pipeline(baseline: str, window_samples: int):
 
         model = EEGNetBCIWrapper(
             weights_path=weights_path,
-            n_channels=22,
-            n_samples=window_samples,
         )
 
         return BCIPipeline(

@@ -25,7 +25,7 @@ class BaseEndToEndModel(ABC):
 
 # --- EEGNet Architecture (Standalone) ---
 class EEGNet(nn.Module):
-    def __init__(self, nb_classes=3, Chans=22, Samples=250, dropoutRate=0.5, F1=8, D=2, F2=16):
+    def __init__(self, nb_classes=3, Chans=16, Samples=250, dropoutRate=0.5, F1=8, D=2, F2=16):
         super(EEGNet, self).__init__()
         self.block1 = nn.Sequential(
             nn.Conv2d(1, F1, (1, 64), padding='same', bias=False),
@@ -79,15 +79,17 @@ class LDAWrapper(BaseClassifier):
 
 
 class EEGNetBCIWrapper(BaseEndToEndModel):
-    def __init__(self, weights_path: str, n_channels: int, n_samples: int, n_classes: int = 3):
-        self.model = EEGNet(nb_classes=n_classes, Chans=n_channels, Samples=n_samples)
+    def __init__(self, weights_path: str, n_classes: int = 3):
+        self.model = None
         self.weights_path = weights_path
-        if os.path.exists(weights_path):
-            self.model.load_state_dict(torch.load(weights_path, map_location='cpu', weights_only=True))
-        self.model.eval()
+        self.n_classes = n_classes
 
     def fit(self, X: np.ndarray, y: np.ndarray):
         """Executes offline stochastic gradient descent to formulate subject-specific weights."""
+        # Dynamically infer dimensions from training data
+        n_epochs, n_channels, n_samples = X.shape
+        self.model = EEGNet(nb_classes=self.n_classes, Chans=n_channels, Samples=n_samples)
+
         criterion = nn.CrossEntropyLoss()
         optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
 
@@ -108,6 +110,20 @@ class EEGNetBCIWrapper(BaseEndToEndModel):
         self.model.eval()
 
     def predict_proba(self, window: EEGWindow) -> dict:
+
+        if self.model is None:
+            n_channels = window.data.shape[0]
+            n_samples = window.data.shape[1]
+
+            self.model = EEGNet(nb_classes=self.n_classes, Chans=n_channels, Samples=n_samples)
+
+            if os.path.exists(self.weights_path):
+                self.model.load_state_dict(torch.load(self.weights_path, map_location='cpu', weights_only=True))
+            else:
+                print("Warning: No weights found. Running with untrained model.")
+            
+            self.model.eval()
+            
         tensor_data = torch.tensor(window.data, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
         with torch.no_grad():
             probs = torch.softmax(self.model(tensor_data), dim=1).numpy()[0]

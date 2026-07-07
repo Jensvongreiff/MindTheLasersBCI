@@ -7,5 +7,6 @@ plots/
 plots_MI/
 __pycache__/
 *.pkl
+*.json
 
 week6/results/
