@@ -2,7 +2,7 @@ import os
 
 from .artifact_removal import SpatialFilterICA
 from .pipeline_constructor import BCIPipeline
-from .feature_extraction import CSPWrapper
+from .feature_extraction import CSPWrapper, BandpowerFeatureExtractor, MorletWaveletFeatureExtractor
 from .model import EEGNetBCIWrapper, LDAWrapper
 
 
@@ -36,31 +36,76 @@ def build_pipeline(baseline: str, window_samples: int):
         return BCIPipeline(
             end_to_end_model=model,
         )
+
+    elif baseline == "csp-lda":
+
+        ica_path = os.path.join(
+            base_dir,
+            "weights",
+            "ica.pkl",
+        )
+
+        csp_path = os.path.join(
+            base_dir,
+            "weights",
+            "csp.pkl",
+        )
+
+        lda_path = os.path.join(
+            base_dir,
+            "weights",
+            "lda.pkl",
+        )
+
+        return BCIPipeline(
+            feature_step=CSPWrapper(
+                model_path=csp_path,
+            ),
+            artifact_step= SpatialFilterICA(model_path=ica_path),
+            classifier_step=LDAWrapper(
+                model_path=lda_path,
+            ),
+        )
     
-    ica_path = os.path.join(
-        base_dir,
-        "weights",
-        "ica.pkl",
-    )
+    elif baseline == "bp-lda":
 
-    csp_path = os.path.join(
-        base_dir,
-        "weights",
-        "csp.pkl",
-    )
+        ica_path = os.path.join(
+            base_dir,
+            "weights",
+            "ica.pkl",
+        )
 
-    lda_path = os.path.join(
-        base_dir,
-        "weights",
-        "lda.pkl",
-    )
+        lda_path = os.path.join(
+            base_dir,
+            "weights",
+            "lda.pkl",
+        )
 
-    return BCIPipeline(
-        feature_step=CSPWrapper(
-            model_path=csp_path,
-        ),
-        artifact_step= SpatialFilterICA(model_path=ica_path),
-        classifier_step=LDAWrapper(
-            model_path=lda_path,
-        ),
-    )
+        return BCIPipeline(
+            feature_step=BandpowerFeatureExtractor(),
+            artifact_step= SpatialFilterICA(model_path=ica_path),
+            classifier_step=LDAWrapper(
+                model_path=lda_path,
+            ),
+        )
+    elif baseline == "wavelet-lda":
+
+        ica_path = os.path.join(
+            base_dir,
+            "weights",
+            "ica.pkl",
+        )
+
+        lda_path = os.path.join(
+            base_dir,
+            "weights",
+            "lda.pkl",
+        )
+
+        return BCIPipeline(
+            feature_step=MorletWaveletFeatureExtractor(),
+            artifact_step= SpatialFilterICA(model_path=ica_path),
+            classifier_step=LDAWrapper(
+                model_path=lda_path,
+            ),
+        )
