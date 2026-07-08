@@ -5,9 +5,11 @@
 
 ## 1. Project Overview
 
-*Mind The Lasers* is a continuous three-lane runner game controlled entirely via Motor Imagery (MI) Brain-Computer Interfaces (BCI). The objective is to navigate a character through a procedurally generated track, collecting targets and avoiding laser obstacles. As the game progresses, the difficulty and speed increase, requiring precise timing and utilization of the boost mechanic.
+Mind The Lasers is a timing-based BCI game designed to evaluate motor imagery EEG decoders in an interactive setting. The player controls a colored ball that moves horizontally across the screen while avoiding vertical laser beams. The decoder outputs one of three commands: left, right, or rest. Movement commands start the ball moving in the corresponding direction, while rest stops the ball.
 
-The project focuses on building a robust, real-time data processing pipeline that can handle continuous EEG streams, process them asynchronously, and map them to game commands while accounting for the inherent noise and misclassification rates of non-invasive EEG.
+The game includes two modes. Training Mode presents structured left, right, and rest trials with clear ground-truth commands and logs decoder performance. Play Mode uses the same command interface in a dynamic game environment with levels, lives, lasers, boost mechanics, and gameplay metrics.
+
+The project combines a real-time EEG processing pipeline with a Pygame-based game. EEG data can come from live LSL streams or replayed XDF recordings. The pipeline processes EEG windows, produces decoded predictions, optionally smooths them, and sends commands to the game over UDP. This separation allows the game, classifier, stream replay, keyboard simulation, and evaluation tools to be tested independently.
 
 ## 2. Command Mapping & Game Strategy
 
@@ -51,6 +53,7 @@ Raw probabilities generated every 100ms are too volatile for continuous runner m
 
 ## 4. Repository Structure
 
+```text
 mind_the_lasers/
 │
 ├── src/
@@ -62,39 +65,52 @@ mind_the_lasers/
 │   │   ├── input_controller.py     # UDP controller and command definitions
 │   │   ├── player.py               # Player movement, boost and lives
 │   │   ├── laser.py                # Sweeping laser obstacle implementation
-│   │   ├── level.py                # Level definitions and progression
+│   │   ├── level.py                # Level class and progression logic
 │   │   ├── levels.py               # Collection of game levels
-│   │   ├── game_metrics.py         # Gameplay metrics and logging
-│   │   ├── training.py             # Training mode implementation
+│   │   ├── game_metrics.py         # Gameplay metrics and game-session logging
+│   │   ├── training_mode.py        # Training mode implementation
 │   │   ├── training_logger.py      # Training trial logging
-|   |   ├── training_trial.py       # Training trials implementation
-│   │   └── settings.py             # Global constants
-│   │ 
+│   │   ├── training_trial.py       # Training trial implementation
+│   │   ├── mode_select.py          # Training/play mode selection screen
+│   │   └── settings.py             # Global game constants
 │   │
 │   ├── pipeline/
 │   │   ├── run_pipeline.py         # Pipeline entry point
-│   │   ├── pipeline_config.py      # Pipeline construction and model loading
-│   │   ├── prediction_sender.py    # Sends decoded predictions over UDP
-│   │   ├── signal.py               # LSL streamers and EEGWindow dataclass
-│   │   ├── filtering.py            # Online filtering
-│   │   ├── artifact_removal.py     # Artifact removal
-│   │   ├── feature_extraction.py   # CSP wrapper
-│   │   ├── model.py                # EEGNet and LDA wrappers
-│   │   ├── smoothing.py            # Prediction smoothing / majority voting
-│   │   ├── decoder_metrics.py      # Decoder evaluation metrics
+│   │   ├── pipeline_config.py      # Pipeline configuration and model loading
 │   │   ├── pipeline_constructor.py # BCIPipeline and worker process
-│   │   └── weights/
+│   │   ├── prediction_sender.py    # Sends decoded predictions over UDP
+│   │   ├── signal.py               # LSL streamers, offline loader and EEGWindow
+│   │   ├── filtering.py            # EEG filtering implementations
+│   │   ├── artifact_removal.py     # Artifact removal implementations
+│   │   ├── feature_extraction.py   # CSP and feature extraction implementations
+│   │   ├── model.py                # EEGNet and LDA model wrappers
+│   │   ├── smoothing.py            # Prediction rejection and smoothing logic
+│   │   ├── decoder_metrics.py      # Decoder evaluation metrics
+│   │   └── weights/                # Serialized fitted pipeline weights
 │   │       ├── csp.pkl
 │   │       ├── lda.pkl
+│   │       ├── ica.pkl
 │   │       └── eegnet.pt
 │   │
-│   └── stream/
-│       ├── streamer.py             # Replays XDF recordings as LSL streams
-│       └── key_press.py            # Keyboard prediction sender (UDP)
+│   ├── stream/
+│   │   ├── streamer.py             # Replays XDF recordings as LSL streams
+│   │   ├── marker_sender.py        # Publishes game/training markers over LSL
+│   │   └── key_press.py            # Keyboard prediction sender over UDP
+│   │
+│   ├── logs/
+│   │   ├── game_logs/              # CSV logs from play-mode sessions
+│   │   └── training_logs/          # CSV logs from training-mode sessions
+│   │
+│   ├── visualization/
+│   │   ├── visualize_play.py       # Visualizes gameplay metrics from CSV logs
+│   │   └── visualize_training.py   # Visualizes training metrics from CSV logs
+│   │
+│   └── tests/
+│       └── ...                      # Pipeline evaluation and automated tests
 │
-├── training_logs/
-├── game_logs/
-├── README.md
+└── README.md
+```
+
 
 ## 5. Execution Logic
 
