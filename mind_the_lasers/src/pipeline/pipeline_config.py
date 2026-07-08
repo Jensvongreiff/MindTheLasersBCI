@@ -1,10 +1,10 @@
 import os
 
 from .pipeline_constructor import BCIPipeline
-from .filtering import IIRBandpassFilter
+from .filtering import IIRBandpassFilter, OfflineZeroPhaseBandpassCARFilter, OfflineCausalSOSBandpassCARFilter
 from .artifact_removal import SpatialFilterICA
 from .feature_extraction import CSPWrapper, BandpowerFeatureExtractor
-from .model import EEGNetBCIWrapper, LDAWrapper
+from .model import EEGNetBCIWrapper, LDAWrapper, LDAWrapperTest
 
 
 def build_pipeline(baseline: str, window_samples: int, suffix: str = "") -> BCIPipeline:
@@ -39,7 +39,7 @@ def build_pipeline(baseline: str, window_samples: int, suffix: str = "") -> BCIP
             end_to_end_model=model,
         )
 
-    elif baseline == "csp-lda":
+    elif baseline == "sos-csp-lda":
         csp_path = os.path.join(
                 base_dir,
                 "weights",
@@ -60,11 +60,42 @@ def build_pipeline(baseline: str, window_samples: int, suffix: str = "") -> BCIP
         )
 
         return BCIPipeline(
-            filter_step=IIRBandpassFilter(lowcut=3.0, highcut=30.0, fs=250),
+            filter_step=OfflineCausalSOSBandpassCARFilter(),
             feature_step=CSPWrapper(
                 model_path=csp_path,
             ),
-            # artifact_step= SpatialFilterICA(model_path=ica_path),
+            artifact_step= SpatialFilterICA(model_path=ica_path),
+            classifier_step=LDAWrapper(
+                model_path=lda_path,
+            ),
+        )
+
+    elif baseline == "zp-csp-lda":
+        csp_path = os.path.join(
+                base_dir,
+                "weights",
+                f"csp{ext}.pkl",
+            )
+
+        ica_path = os.path.join(
+            base_dir,
+            "weights",
+            f"ica{ext}.pkl",
+            )
+
+
+        lda_path = os.path.join(
+            base_dir,
+            "weights",
+            f"lda{ext}.pkl",
+        )
+
+        return BCIPipeline(
+            filter_step=OfflineZeroPhaseBandpassCARFilter(),
+            feature_step=CSPWrapper(
+                model_path=csp_path,
+            ),
+            artifact_step= SpatialFilterICA(model_path=ica_path),
             classifier_step=LDAWrapper(
                 model_path=lda_path,
             ),

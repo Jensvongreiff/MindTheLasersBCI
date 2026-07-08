@@ -159,7 +159,7 @@ class CSPWrapper(BaseFeatureExtractor):
     def fit(self, X: np.ndarray, y: np.ndarray, sampling_rate: float | None = None):
         """Fits the Common Spatial Pattern filters using MNE decoding logic."""
         from mne.decoding import CSP
-        self.csp = CSP(n_components=self.n_components, reg=None, log=True, norm_trace=False)
+        self.csp = CSP(n_components=self.n_components, reg="ledoit_wolf", log=True, norm_trace=False, cov_est='epoch')
         self.csp.fit(X, y)
         
         os.makedirs(os.path.dirname(self.model_path), exist_ok=True)
