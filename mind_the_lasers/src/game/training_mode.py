@@ -43,6 +43,8 @@ class TrainingMode:
 
         self.summary = None
 
+        self.prediction_received = False
+
 
         self.load_trial()
 
@@ -109,6 +111,9 @@ class TrainingMode:
         self.feedback_timer = 0.0
         self.rest_hold_timer = 0.0
 
+        self.prediction_received = False
+        self.controller.reset()
+
         self.current_trial.start()
 
     def update(self, dt):
@@ -120,10 +125,12 @@ class TrainingMode:
         trial = self.current_trial
 
         # Waiting for classifier decision.
-        if not trial.decision_made:
+        if not trial.decision_made and not self.prediction_received:
             prediction = self.controller.get_new_prediction()
 
             if prediction is not None:
+                self.prediction_received = True
+
                 confidence = self.controller.confidence
 
                 self._handle_decision(
@@ -133,6 +140,7 @@ class TrainingMode:
 
         # Decision has already been made.
         else:
+            self.controller.get_new_prediction()
             self._update_after_decision(dt)
 
         # Before a decision, REST trials move automatically.
@@ -197,7 +205,16 @@ class TrainingMode:
         # visibly move ball toward target.
         self.player.direction = trial.ground_truth.value
 
-        self.player.update(dt)
+        self.player.x += (
+            self.player.direction
+            * BALL_SPEED_TRAINING
+            * dt
+        )
+
+        self.player.x = max(
+            BALL_RADIUS,
+            min(WIDTH - BALL_RADIUS, self.player.x),
+        )
 
         if trial.ground_truth == Command.RIGHT:
             reached_target = self.player.x >= trial.goal_x
@@ -227,7 +244,7 @@ class TrainingMode:
     def _update_rest_trial(self, dt):
         self.player.x += (
             self.rest_auto_direction
-            * BALL_SPEED
+            * BALL_SPEED_TRAINING
             * dt
         )
 

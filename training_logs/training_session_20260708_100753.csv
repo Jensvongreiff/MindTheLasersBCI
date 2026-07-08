@@ -1,0 +1,2 @@
+timestamp,trial_number,ground_truth_command,predicted_command,confidence,accepted_command,correct,decision_time,game_event
+2026-07-08T10:07:54.869019,1,RIGHT,RIGHT,0.0603,RIGHT,True,1.2894,correct_command

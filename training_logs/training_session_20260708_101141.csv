@@ -1,0 +1,13 @@
+timestamp,trial_number,ground_truth_command,predicted_command,confidence,accepted_command,correct,decision_time,game_event
+2026-07-08T10:11:41.578914,1,RIGHT,RIGHT,0.0549,RIGHT,True,0.3876,correct_command
+2026-07-08T10:11:46.111623,2,RIGHT,RIGHT,0.056,RIGHT,True,0.7123,correct_command
+2026-07-08T10:11:50.162789,3,RIGHT,REST,0.076,REST,False,0.2257,incorrect_command
+2026-07-08T10:11:51.048217,4,RIGHT,REST,0.0855,REST,False,0.3706,incorrect_command
+2026-07-08T10:11:51.919242,5,RIGHT,REST,0.0879,REST,False,0.3701,incorrect_command
+2026-07-08T10:11:52.756312,6,LEFT,REST,0.0907,REST,False,0.3376,incorrect_command
+2026-07-08T10:11:53.562580,7,LEFT,REST,0.1059,REST,False,0.3063,incorrect_command
+2026-07-08T10:11:54.339359,8,LEFT,REST,0.1431,REST,False,0.2741,incorrect_command
+2026-07-08T10:11:55.016225,9,LEFT,REST,0.1237,REST,False,0.1617,incorrect_command
+2026-07-08T10:11:55.757464,10,LEFT,REST,0.1012,REST,False,0.228,incorrect_command
+2026-07-08T10:11:56.512588,11,REST,REST,0.1025,REST,True,0.2414,correct_command
+2026-07-08T10:11:58.852580,12,REST,REST,0.1015,REST,True,0.3389,correct_command
