@@ -217,6 +217,7 @@ class EEGDataLoaderOffline:
         self.channel_labels = None
         self.epochs = None
         self.filtered_events_id = None
+        self.sampling_rate = None
 
         if events is not None:
             self.events = events
@@ -510,6 +511,7 @@ class EEGDataLoaderOffline:
         self.raw_data = raw_data
         self.markers = markers
         self.channel_labels = channel_labels
+        self.sampling_rate = sfreq
 
     def get_epochs(
         self,
@@ -584,10 +586,119 @@ class EEGDataLoaderOffline:
         self.epochs = epochs
         self.filtered_events_id = filtered_events_id
 
+    def create_sliding_windows(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        window_length: float = 1.0,
+        stride: float = 0.1,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Convert full EEG epochs into overlapping fixed-length windows.
+
+        Every window inherits the class label of its source epoch. The input
+        epochs should already have been assigned to either the training or the
+        test set so that overlapping windows from the same epoch cannot leak
+        across the split.
+        """
+        X = np.asarray(X)
+        y = np.asarray(y)
+
+        if X.ndim != 3:
+            raise ValueError(
+                "X must have shape "
+                "(n_epochs, n_channels, n_timepoints), "
+                f"got {X.shape}."
+            )
+
+        if y.ndim != 1:
+            raise ValueError(
+                f"y must be one-dimensional, got shape {y.shape}."
+            )
+
+        if X.shape[0] != y.shape[0]:
+            raise ValueError(
+                "X and y must contain the same number of epochs, "
+                f"got {X.shape[0]} and {y.shape[0]}."
+            )
+
+        if self.sampling_rate is None:
+            raise RuntimeError(
+                "The sampling rate is unknown. Load the raw EEG data before "
+                "creating sliding windows."
+            )
+
+        if window_length <= 0:
+            raise ValueError(
+                f"window_length must be positive, got {window_length}."
+            )
+
+        if stride <= 0:
+            raise ValueError(f"stride must be positive, got {stride}.")
+
+        window_samples = int(round(window_length * self.sampling_rate))
+        stride_samples = int(round(stride * self.sampling_rate))
+
+        if window_samples < 1:
+            raise ValueError(
+                "window_length is shorter than one sample at sampling rate "
+                f"{self.sampling_rate} Hz."
+            )
+
+        if stride_samples < 1:
+            raise ValueError(
+                "stride is shorter than one sample at sampling rate "
+                f"{self.sampling_rate} Hz."
+            )
+
+        n_timepoints = X.shape[2]
+
+        if window_samples > n_timepoints:
+            epoch_duration = n_timepoints / self.sampling_rate
+
+            raise ValueError(
+                f"window_length={window_length} s requires {window_samples} "
+                f"samples, but each epoch contains only {n_timepoints} "
+                f"samples ({epoch_duration:.3f} s)."
+            )
+
+        windows = np.lib.stride_tricks.sliding_window_view(
+            X,
+            window_shape=window_samples,
+            axis=-1,
+        )
+
+        # Keep windows separated by the requested stride.
+        windows = windows[:, :, ::stride_samples, :]
+
+        n_windows_per_epoch = windows.shape[2]
+
+        # Convert:
+        # (epochs, channels, windows, samples)
+        # into:
+        # (epochs * windows, channels, samples)
+        X_windows = (
+            windows.transpose(0, 2, 1, 3)
+            .reshape(-1, X.shape[1], window_samples)
+            .copy()
+        )
+
+        y_windows = np.repeat(y, n_windows_per_epoch)
+
+        self.window_length = window_length
+        self.stride = stride
+        self.window_samples = window_samples
+        self.stride_samples = stride_samples
+        self.n_windows_per_epoch = n_windows_per_epoch
+
+        return X_windows, y_windows
+
     def load_data(
         self,
         test_size: float = 0.5,
         random_state: int = 42,
+        window_length=1.0,  # seconds
+        stride=0.1,         # seconds
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """
         Load the XDF recording, create task epochs, and return a stratified
@@ -680,6 +791,8 @@ class EEGDataLoaderOffline:
             raw_data=self.raw_data,
             markers=self.markers,
             event_dict=event_dict,
+            tmin=0.5,
+            tmax=2.5,
         )
 
         if self.epochs is None or len(self.epochs) == 0:
@@ -743,11 +856,27 @@ class EEGDataLoaderOffline:
                 "for every class. Too few epochs were found for: "
                 f"{classes_with_too_few_samples}"
             )
-
-        return train_test_split(
+        
+        X_train_epochs, X_test_epochs, y_train_epochs, y_test_epochs = train_test_split(
             X,
             y,
             test_size=test_size,
             stratify=y,
             random_state=random_state,
         )
+
+        X_train, y_train = self.create_sliding_windows(
+            X_train_epochs,
+            y_train_epochs,
+            window_length=window_length,
+            stride=stride,
+        )
+
+        X_test, y_test = self.create_sliding_windows(
+            X_test_epochs,
+            y_test_epochs,
+            window_length=window_length,
+            stride=stride,
+        )
+
+        return X_train, X_test, y_train, y_test

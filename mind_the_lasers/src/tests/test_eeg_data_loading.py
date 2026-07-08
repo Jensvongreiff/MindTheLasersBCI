@@ -8,7 +8,8 @@ def main():
 
     # Sample data
     default_run_data_path = "D:/Programming/BCI_Practical/practical-ss26-team4/data/sub-P999/sub-P999_ses-S009_task-Default_run-001_eeg.xdf"
-
+    ses_02 = "D:/Programming/BCI_Practical/practical-ss26-team4/data/sub-P999/ses-S002/sub-P666_ses-S002_task-arrow_run-001_eeg.xdf"
+    ses_02_dino_run = "D:/Programming/BCI_Practical/practical-ss26-team4/data/sub-P999/ses-S002/sub-P666_ses-S002_task-dino_run-003_eeg.xdf"
 
     data_loader = EEGDataLoaderOffline(default_run_data_path)
 

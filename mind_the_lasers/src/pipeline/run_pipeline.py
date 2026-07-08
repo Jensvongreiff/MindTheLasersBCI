@@ -28,7 +28,7 @@ def main():
 
     parser.add_argument(
         "--baseline",
-        choices=["eegnet", "csp-lda"],
+        choices=["eegnet", "csp-lda", "bp-lda", "wavelet-lda"],
         default="csp-lda",
     )
 
@@ -75,6 +75,8 @@ def main():
         data_loader = EEGDataLoaderOffline(data_path=args.dataset)
 
         X_train, X_test, y_train, y_test = data_loader.load_data()
+
+        pipeline.data_loader = data_loader
 
         pipeline.calibrate(
             X_train,

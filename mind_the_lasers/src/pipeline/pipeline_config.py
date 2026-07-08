@@ -1,6 +1,8 @@
 import os
 
 from .pipeline_constructor import BCIPipeline
+from .filtering import IIRBandpassFilter
+from .artifact_removal import SpatialFilterICA
 from .feature_extraction import CSPWrapper
 from .model import EEGNetBCIWrapper, LDAWrapper
 
@@ -43,6 +45,13 @@ def build_pipeline(baseline: str, window_samples: int, suffix: str = "") -> BCIP
         f"csp{ext}.pkl",
     )
 
+    ica_path = os.path.join(
+        base_dir,
+        "weights",
+        f"ica{ext}.pkl",
+        )
+
+
     lda_path = os.path.join(
         base_dir,
         "weights",
@@ -50,9 +59,11 @@ def build_pipeline(baseline: str, window_samples: int, suffix: str = "") -> BCIP
     )
 
     return BCIPipeline(
+        filter_step=IIRBandpassFilter(lowcut=3.0, highcut=30.0, fs=250),
         feature_step=CSPWrapper(
             model_path=csp_path,
         ),
+        artifact_step= SpatialFilterICA(model_path=ica_path),
         classifier_step=LDAWrapper(
             model_path=lda_path,
         ),
