@@ -6,6 +6,8 @@ from mind_the_lasers.src.game.mode_select import ModeSelect
 from mind_the_lasers.src.game.training_mode import TrainingMode
 from mind_the_lasers.src.game.input_controller import UDPController
 
+from mind_the_lasers.src.game.laser import SweepingLaser
+
 
 def main():
     pygame.init()
@@ -23,6 +25,13 @@ def main():
     controller = UDPController()
 
     mode_select = ModeSelect(screen)
+
+    menu_lasers = [
+        SweepingLaser(x=90,          wait_time=1.0, initial_delay=0.0, grow_speed=800, beam_width=18, active_time=0.3),
+        SweepingLaser(x=180,         wait_time=1.0, initial_delay=0.5, grow_speed=800, beam_width=18, active_time=0.3),
+        SweepingLaser(x=WIDTH - 180, wait_time=1.0, initial_delay=1.0, grow_speed=800, beam_width=18, active_time=0.3),
+        SweepingLaser(x=WIDTH - 90,  wait_time=1.0, initial_delay=1.5, grow_speed=800, beam_width=18, active_time=0.3),
+    ]
 
     current_mode = "menu"
 
@@ -97,7 +106,13 @@ def main():
             
 
         if current_mode == "menu":
+            for laser in menu_lasers:
+                laser.update(dt)
+
             mode_select.draw()
+
+            for laser in menu_lasers:
+                laser.draw(screen)
 
         elif current_mode == "training":
             training_mode.update(dt)
