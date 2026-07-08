@@ -84,9 +84,13 @@ class LSLStreamer(BaseStreamer):
                 buffer.extend(chunk)
 
                 while len(buffer) >= self.window_samples:
-                    window_data = np.array(
-                        buffer[:self.window_samples]
-                    ).T
+                    window_data = (
+                        np.array(
+                            buffer[:self.window_samples],
+                            dtype=float,
+                        ).T
+                        * 1e-6
+                    )
 
                     try:
                         self.input_queue.put_nowait(
