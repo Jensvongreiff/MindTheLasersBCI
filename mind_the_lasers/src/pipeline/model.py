@@ -1,5 +1,6 @@
 import os
 import pickle
+from pyexpat import features
 import numpy as np
 import torch
 import torch.nn as nn
@@ -63,6 +64,7 @@ class LDAWrapper(BaseClassifier):
         if os.path.exists(self.model_path):
             with open(self.model_path, 'rb') as f:
                 self.lda = pickle.load(f)
+            print(f"Loaded fitted LDA from {self.model_path}.")
 
     def fit(self, X: np.ndarray, y: np.ndarray):
         from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
@@ -75,6 +77,50 @@ class LDAWrapper(BaseClassifier):
 
     def predict_proba(self, features: np.ndarray) -> dict:
         probs = self.lda.predict_proba(np.expand_dims(features, axis=0))[0]
+        return {"left": float(probs[0]), "right": float(probs[1]), "rest": float(probs[2])}
+
+# --- End-To-End Model Wrapper ---
+class LDAWrapperTest(BaseClassifier):
+    def __init__(self, model_path: str):
+        self.model_path = model_path
+        self.lda = None
+        if os.path.exists(self.model_path):
+            with open(self.model_path, 'rb') as f:
+                self.lda = pickle.load(f)
+
+    @staticmethod
+    def make_classifier():
+        """
+        Classifier used consistently for all feature methods.
+
+        Pipeline:
+            StandardScaler
+            → shrinkage LDA
+        """
+        from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+        from sklearn.preprocessing import StandardScaler
+        from sklearn.pipeline import make_pipeline
+        
+        clf = make_pipeline(
+            StandardScaler(),
+            LinearDiscriminantAnalysis(
+                solver="lsqr",
+                shrinkage="auto",
+            )
+        )
+        return clf
+
+    def fit(self, X: np.ndarray, y: np.ndarray):
+        from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+        self.lda = self.make_classifier()
+        self.lda.fit(X, y)
+        
+        os.makedirs(os.path.dirname(self.model_path), exist_ok=True)
+        with open(self.model_path, 'wb') as f:
+            pickle.dump(self.lda, f)
+
+    def predict_proba(self, features: np.ndarray) -> dict:
+        probs = self.lda.predict_proba(features.reshape(1, -1))[0]
         return {"left": float(probs[0]), "right": float(probs[1]), "rest": float(probs[2])}
 
 

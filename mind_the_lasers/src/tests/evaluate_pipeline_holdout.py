@@ -42,9 +42,9 @@ DATASET_PATH = (
     r"data/sub-P999/sub-P999_ses-S009_task-Default_run-001_eeg.xdf"
 )
 
-BASELINE = "csp-lda"
+BASELINE = "zp-csp-lda"
 WINDOW_LENGTH_SECONDS = 1
-TEST_SIZE = 0.2
+TEST_SIZE = 0.3
 
 OUTPUT_PATH = Path(
     "mind_the_lasers/reports/"
