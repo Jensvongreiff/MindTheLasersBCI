@@ -23,6 +23,7 @@ class IIRBandpassFilter(BaseFilter):
         high = highcut / nyq
         # Calculate filter coefficients once during initialization
         self.b, self.a = butter(order, [low, high], btype='band')
+        print(f"Initialized IIRBandpassFilter with lowcut={lowcut}Hz, highcut={highcut}Hz, fs={fs}Hz, order={order}")
 
     def process(self, window: EEGWindow) -> EEGWindow:
         # Apply the filter along the time axis (axis=1)

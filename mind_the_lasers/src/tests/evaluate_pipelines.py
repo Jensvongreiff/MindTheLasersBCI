@@ -94,14 +94,15 @@ def main():
     # ==========================================
     # 1. Configuration
     # ==========================================
-    dataset_path = r"C:\Users\marti\Documents\Programmieren\RCI\4Semester\BCI\practical-ss26-team4\data\sub-P999\our_structure\sub-P666_ses-S002_task-arrow_run-001_eeg.xdf" 
+    dataset_path = r"D:/Programming/BCI_Practical/practical-ss26-team4/data/sub-P999/sub-P999_ses-S009_task-Default_run-001_eeg.xdf" 
     
     fs = 250
     window_samples = int(fs * 1.0)  # 1-second window
     stride_samples = int(fs * 0.1)  # 100ms stride (matching live LSL behavior)
     n_splits = 5                    # 5-Fold Cross Validation
-    baselines = ["csp-lda", "eegnet"]
-    
+    # baselines = ["csp-lda", "eegnet"]
+    baselines = ["csp-lda"]
+
     # Matches the default mapping in EEGDataLoaderOffline
     label_map = {0: "left", 1: "right", 2: "rest"}
 
@@ -112,10 +113,10 @@ def main():
     data_loader = EEGDataLoaderOffline(data_path=dataset_path)
     
     # The loader naturally splits 50/50. We recombine it to perform custom K-Fold splitting.
-    X_train, X_test, y_train, y_test = data_loader.load_data()
+    X_train, X_test, y_train, y_test = data_loader.load_data(test_size=0.2)
     X = np.concatenate([X_train, X_test], axis=0)
     y = np.concatenate([y_train, y_test], axis=0)
-    
+
     print(f"Total epochs available: {X.shape[0]}")
 
     skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
@@ -134,7 +135,7 @@ def main():
 
         for fold, (train_idx, test_idx) in enumerate(skf.split(X, y), 1):
             print(f"\n--- Fold {fold}/{n_splits} ---")
-            
+
             X_train_fold, X_test_fold = X[train_idx], X[test_idx]
             y_train_fold, y_test_fold = y[train_idx], y[test_idx]
 
@@ -143,9 +144,12 @@ def main():
             smoothing = SmoothingController(window_size=5, confidence_threshold=0.60)
             evaluator = DecoderEvaluator()
 
-            # Calibrate the pipeline (This will temporarily overwrite the weights files)
-            pipeline.calibrate(X_train_fold, y_train_fold, sampling_rate=fs)
+            pipeline.data_loader = data_loader
 
+            pipeline.calibrate(
+                X_train,
+                y_train,
+            )
             # Simulate the continuous sliding window over the test epochs
             for trial_idx, (trial_data, label) in enumerate(zip(X_test_fold, y_test_fold)):
                 ground_truth_str = label_map[label]
@@ -154,7 +158,7 @@ def main():
                 # Slide window across the 3-second epoch (mimicking LSL Streamer)
                 for i in range(0, n_samples - window_samples + 1, stride_samples):
                     window_data = trial_data[:, i:i+window_samples]
-                    
+
                     window = EEGWindow(
                         data=window_data, 
                         sampling_rate=fs, 
@@ -193,6 +197,7 @@ def main():
         # Train final production model on 100% of data and save weights with the matched suffix
         print(f"Training final {baseline.upper()} model on full dataset...")
         final_pipeline = build_pipeline(baseline, window_samples, suffix=run_suffix)
+        final_pipeline.data_loader = data_loader
         final_pipeline.calibrate(X, y)
         print(f"Saved Final Weights with suffix: _{run_suffix}")
 
