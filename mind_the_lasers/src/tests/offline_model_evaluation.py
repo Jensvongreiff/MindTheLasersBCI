@@ -28,7 +28,7 @@ def main():
     print(f"Total epochs available: {X.shape[0]}")
     print(f"Data shape (Epochs, Channels, Samples): {X.shape}\n")
 
-    skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
+    skf = StratifiedKFold(n_splits=n_splits, shuffle=False, random_state=None)
 
     # 3. Static Evaluation Loop (No Smoothing, No Sliding Window)
     for baseline in baselines:
@@ -46,7 +46,8 @@ def main():
 
             # Initialize pipeline
             pipeline = build_pipeline(baseline, window_samples, suffix="temp")
-            pipeline.calibrate(X_train_fold, y_train_fold, sampling_rate=fs)
+            pipeline.data_loader = data_loader
+            pipeline.calibrate(X_train_fold, y_train_fold)
 
             y_true_fold = []
             y_pred_fold = []

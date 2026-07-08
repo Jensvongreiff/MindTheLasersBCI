@@ -20,6 +20,7 @@ class BCIPipeline:
     ):
         self.filter_step = filter_step
         self.artifact_step = artifact_step
+        self.data_loader = data_loader
 
         if end_to_end_model is not None:
             self.model_path = 'end_to_end'

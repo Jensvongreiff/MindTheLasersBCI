@@ -41,7 +41,7 @@ class SpatialFilterICA(BaseArtifactRemoval):
 
     def __init__(
         self,
-        model_path: str = None,
+        model_path: str = "",
         n_components: Optional[Union[int, float]] = None,
         random_state: int = 97,
         max_iter: Union[int, str] = "auto",

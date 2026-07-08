@@ -19,6 +19,7 @@ def build_pipeline(baseline: str, window_samples: int, suffix: str = "") -> BCIP
     """
 
     base_dir = os.path.dirname(__file__)
+    data_path=r"C:\Users\marti\Documents\Programmieren\RCI\4Semester\BCI\practical-ss26-team4\data\sub-P999\ses-S002\eeg\sub-P666_ses-S002_task-arrow_run-001_eeg.xdf"
 
     # Format the suffix for the file names (e.g., "_0001")
     ext = f"_{suffix}" if suffix else ""    
@@ -31,11 +32,19 @@ def build_pipeline(baseline: str, window_samples: int, suffix: str = "") -> BCIP
             f"eegnet{ext}.pt",
         )
 
+        ica_path = os.path.join(
+            base_dir, 
+            "weights", 
+            f"ica{ext}.pkl",
+        )
+
         model = EEGNetBCIWrapper(
             weights_path=weights_path,
         )
 
         return BCIPipeline(
+            filter_step=IIRBandpassFilter(lowcut=8.0, highcut=30.0, fs=250),
+            artifact_step=SpatialFilterICA(model_path=ica_path),
             end_to_end_model=model,
         )
 
@@ -60,7 +69,7 @@ def build_pipeline(baseline: str, window_samples: int, suffix: str = "") -> BCIP
         )
 
         return BCIPipeline(
-            filter_step=IIRBandpassFilter(lowcut=3.0, highcut=30.0, fs=250),
+            filter_step=IIRBandpassFilter(lowcut=8.0, highcut=30.0, fs=250),
             feature_step=CSPWrapper(
                 model_path=csp_path,
             ),
@@ -85,7 +94,7 @@ def build_pipeline(baseline: str, window_samples: int, suffix: str = "") -> BCIP
         )
 
         return BCIPipeline(
-            filter_step=IIRBandpassFilter(lowcut=3.0, highcut=30.0, fs=250),
+            filter_step=IIRBandpassFilter(lowcut=8.0, highcut=30.0, fs=250),
             feature_step=BandpowerFeatureExtractor(),
             # artifact_step= SpatialFilterICA(model_path=ica_path),
             classifier_step=LDAWrapper(
