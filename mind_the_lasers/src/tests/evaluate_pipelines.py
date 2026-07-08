@@ -96,8 +96,10 @@ def main():
     # ==========================================
     dataset_path = r"D:/Programming/BCI_Practical/practical-ss26-team4/data/sub-P999/sub-P999_ses-S009_task-Default_run-001_eeg.xdf" 
     
+    window_length = 1.5  # seconds
+
     fs = 250
-    window_samples = int(fs * 1.0)  # 1-second window
+    window_samples = int(fs * window_length)  # window
     stride_samples = int(fs * 0.1)  # 100ms stride (matching live LSL behavior)
     n_splits = 5                    # 5-Fold Cross Validation
     # baselines = ["csp-lda", "eegnet"]
@@ -110,7 +112,7 @@ def main():
     # 2. Data Loading & Preparation
     # ==========================================
     print(f"Loading dataset: {dataset_path}")
-    data_loader = EEGDataLoaderOffline(data_path=dataset_path)
+    data_loader = EEGDataLoaderOffline(data_path=dataset_path, window_length=window_length)
     
     # The loader naturally splits 50/50. We recombine it to perform custom K-Fold splitting.
     X_train, X_test, y_train, y_test = data_loader.load_data(test_size=0.2)
@@ -141,7 +143,7 @@ def main():
 
             # Initialize isolated components
             pipeline = build_pipeline(baseline, window_samples, suffix="temp")
-            smoothing = SmoothingController(window_size=5, confidence_threshold=0.60)
+            smoothing = SmoothingController(window_size=5, confidence_threshold=0.50)
             evaluator = DecoderEvaluator()
 
             pipeline.data_loader = data_loader

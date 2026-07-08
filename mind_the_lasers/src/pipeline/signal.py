@@ -210,7 +210,7 @@ def load_and_split_offline_data(mat_path: str, fs: int = 250) -> Tuple[np.ndarra
     return train_test_split(X, y, test_size=0.5, stratify=y, random_state=42)
 
 class EEGDataLoaderOffline:
-    def __init__(self, data_path: Path | str, events: dict = None):
+    def __init__(self, data_path: Path | str, events: dict = None, window_length: float = 1.0, stride: float = 0.1):
         self.data_path = data_path
         self.raw_data = None
         self.markers = None
@@ -218,6 +218,8 @@ class EEGDataLoaderOffline:
         self.epochs = None
         self.filtered_events_id = None
         self.sampling_rate = None
+        self.window_length = window_length
+        self.stride = stride
 
         if events is not None:
             self.events = events
@@ -590,8 +592,6 @@ class EEGDataLoaderOffline:
         self,
         X: np.ndarray,
         y: np.ndarray,
-        window_length: float = 1.0,
-        stride: float = 0.1,
     ) -> tuple[np.ndarray, np.ndarray]:
         """
         Convert full EEG epochs into overlapping fixed-length windows.
@@ -603,6 +603,9 @@ class EEGDataLoaderOffline:
         """
         X = np.asarray(X)
         y = np.asarray(y)
+
+        window_length = self.window_length
+        stride = self.stride
 
         if X.ndim != 3:
             raise ValueError(
@@ -697,8 +700,6 @@ class EEGDataLoaderOffline:
         self,
         test_size: float = 0.5,
         random_state: int = 42,
-        window_length=1.0,  # seconds
-        stride=0.1,         # seconds
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """
         Load the XDF recording, create task epochs, and return a stratified
@@ -857,6 +858,7 @@ class EEGDataLoaderOffline:
                 f"{classes_with_too_few_samples}"
             )
         
+        
         X_train_epochs, X_test_epochs, y_train_epochs, y_test_epochs = train_test_split(
             X,
             y,
@@ -868,15 +870,11 @@ class EEGDataLoaderOffline:
         X_train, y_train = self.create_sliding_windows(
             X_train_epochs,
             y_train_epochs,
-            window_length=window_length,
-            stride=stride,
         )
 
         X_test, y_test = self.create_sliding_windows(
             X_test_epochs,
             y_test_epochs,
-            window_length=window_length,
-            stride=stride,
         )
 
         return X_train, X_test, y_train, y_test
