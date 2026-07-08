@@ -16,8 +16,12 @@ class TrainingLogger:
         "game_event",
     ]
 
-    def __init__(self, output_dir="training_logs"):
-        output_path = Path(output_dir)
+    def __init__(self, output_dir=None):
+        if output_dir is None:
+            output_path = Path(__file__).resolve().parents[1] / "logs" / "training_logs"
+        else:
+            output_path = Path(output_dir)
+
         output_path.mkdir(parents=True, exist_ok=True)
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

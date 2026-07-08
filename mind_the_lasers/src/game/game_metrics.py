@@ -24,10 +24,15 @@ class GameMetrics:
         "effective_movement_ratio",
         "boosts_used",
         "boosted_collisions",
+        "overall_score"
     ]
 
-    def __init__(self, total_levels, output_dir="game_logs"):
-        output_path = Path(output_dir)
+    def __init__(self, total_levels, output_dir=None):
+        if output_dir is None:
+            output_path = Path(__file__).resolve().parents[1] / "logs" / "game_logs"
+        else:
+            output_path = Path(output_dir)
+
         output_path.mkdir(parents=True, exist_ok=True)
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -186,6 +191,40 @@ class GameMetrics:
             return 0.0
 
         return self.time_moving_toward_goal / total_movement
+    
+    def overall_score(self):
+        level_progress = (
+            self.levels_completed / self.total_levels
+            if self.total_levels > 0
+            else 0.0
+        )
+
+        avoidance = self.avoidance_rate()
+
+        effective_movement = self.effective_movement_ratio()
+
+        # Time efficiency:
+        # full credit if average completed level time <= 10s
+        # zero credit if average completed level time >= 40s
+        avg_time = self.average_level_time()
+
+        if avg_time <= 0:
+            time_efficiency = 0.0
+        elif avg_time <= 10:
+            time_efficiency = 1.0
+        elif avg_time >= 40:
+            time_efficiency = 0.0
+        else:
+            time_efficiency = 1.0 - ((avg_time - 10) / 30)
+
+        score = (
+            50 * level_progress
+            + 20 * time_efficiency
+            + 20 * avoidance
+            + 10 * effective_movement
+        )
+
+        return round(score, 2)
 
     def get_summary(self):
         return {
@@ -206,6 +245,7 @@ class GameMetrics:
             "effective_movement_ratio": self.effective_movement_ratio(),
             "boosts_used": self.boosts_used,
             "boosted_collisions": self.boosted_collisions,
+            "overall_score": self.overall_score(),
         }
 
     def save(self):

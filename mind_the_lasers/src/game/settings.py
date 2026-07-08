@@ -3,7 +3,7 @@ HEIGHT = 600
 FPS = 60
 
 BALL_RADIUS = 18
-BALL_SPEED = 140 #100 is a good number
+BALL_SPEED = 220 #100 is a good number
 BALL_SPEED_TRAINING = 280
 
 MAX_LIVES = 5
