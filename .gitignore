@@ -10,5 +10,6 @@ __pycache__/
 *.json
 *.csv
 *.pt
+*.png
 
 week6/results/
