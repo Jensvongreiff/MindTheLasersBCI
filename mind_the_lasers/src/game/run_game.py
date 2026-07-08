@@ -8,6 +8,8 @@ from mind_the_lasers.src.game.input_controller import UDPController
 
 from mind_the_lasers.src.game.laser import SweepingLaser
 
+from mind_the_lasers.src.stream.marker_sender import LSLMarkerSender
+
 
 def main():
     pygame.init()
@@ -23,6 +25,8 @@ def main():
     clock = pygame.time.Clock()
 
     controller = UDPController()
+
+    marker_sender = LSLMarkerSender()
 
     mode_select = ModeSelect(screen)
 
@@ -89,6 +93,7 @@ def main():
                     training_mode = TrainingMode(
                         screen,
                         controller,
+                        marker_sender,
                         trials_per_command=5,
                     )
 

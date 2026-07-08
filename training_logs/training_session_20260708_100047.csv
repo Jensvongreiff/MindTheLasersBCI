@@ -1,8 +1,0 @@
-timestamp,trial_number,ground_truth_command,predicted_command,confidence,accepted_command,correct,decision_time,game_event
-2026-07-08T10:00:49.650513,1,RIGHT,RIGHT,0.1005,RIGHT,True,2.1338,correct_command
-2026-07-08T10:00:55.678383,2,RIGHT,RIGHT,0.1062,RIGHT,True,0.0159,correct_command
-2026-07-08T10:01:08.366661,3,RIGHT,REST,0.1104,REST,False,6.6807,incorrect_command
-2026-07-08T10:01:08.883309,4,RIGHT,REST,0.1368,REST,False,0.0161,incorrect_command
-2026-07-08T10:01:09.400157,5,RIGHT,REST,0.1277,REST,False,0.0157,incorrect_command
-2026-07-08T10:01:12.032073,6,LEFT,LEFT,0.1459,LEFT,True,2.1305,correct_command
-2026-07-08T10:01:18.055791,7,LEFT,LEFT,0.1419,LEFT,True,0.016,correct_command

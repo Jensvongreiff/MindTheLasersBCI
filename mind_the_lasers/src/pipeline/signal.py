@@ -40,29 +40,78 @@ class LSLStreamer(BaseStreamer):
 
     def run(self):
         from pylsl import StreamInlet, resolve_byprop
-        streams = resolve_byprop('type', self.stream_type, timeout=5.0)
-        if not streams:
-            raise RuntimeError(f"No active LSL stream found for type '{self.stream_type}'.")
+
+        print(
+            f"Waiting for LSL stream of type '{self.stream_type}'..."
+        )
+
+        streams = []
+
+        while (
+            not self.stop_event.is_set()
+            and not streams
+        ):
+            streams = resolve_byprop(
+                "type",
+                self.stream_type,
+                timeout=2.0,
+            )
+
+            if not streams:
+                print(
+                    f"Waiting for connection... "
+                    f"(LSL type='{self.stream_type}')"
+                )
+
+        # Streamer was stopped before a connection was established.
+        if self.stop_event.is_set():
+            return
+
         inlet = StreamInlet(streams[0])
 
+        print(
+            f"Connected to LSL stream: "
+            f"{streams[0].name()} "
+            f"(type='{streams[0].type()}')"
+        )
+
         buffer = []
+
         while not self.stop_event.is_set():
             chunk, timestamps = inlet.pull_chunk(timeout=1.0)
+
             if chunk:
                 buffer.extend(chunk)
+
                 while len(buffer) >= self.window_samples:
-                    window_data = np.array(buffer[:self.window_samples]).T # (Channels, Samples)
-                    
+                    window_data = np.array(
+                        buffer[:self.window_samples]
+                    ).T
+
                     try:
-                        self.input_queue.put_nowait(EEGWindow(data=window_data, sampling_rate=self.fs, timestamp=time.time()))
+                        self.input_queue.put_nowait(
+                            EEGWindow(
+                                data=window_data,
+                                sampling_rate=self.fs,
+                                timestamp=time.time(),
+                            )
+                        )
+
                     except queue.Full:
                         try:
                             self.input_queue.get_nowait()
-                            self.input_queue.put_nowait(EEGWindow(data=window_data, sampling_rate=self.fs, timestamp=time.time()))
+
+                            self.input_queue.put_nowait(
+                                EEGWindow(
+                                    data=window_data,
+                                    sampling_rate=self.fs,
+                                    timestamp=time.time(),
+                                )
+                            )
+
                         except (queue.Empty, queue.Full):
                             pass
-                    
-                    # Apply sliding window stride
+
                     buffer = buffer[self.stride_samples:]
 
 class OfflineStreamer(BaseStreamer):

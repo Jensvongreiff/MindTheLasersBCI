@@ -13,10 +13,12 @@ class TrainingMode:
         self,
         screen,
         controller,
+        marker_sender,
         trials_per_command=5,
     ):
         self.screen = screen
         self.controller = controller
+        self.marker_sender = marker_sender
 
         self.player = Player()
 
@@ -115,6 +117,12 @@ class TrainingMode:
         self.controller.reset()
 
         self.current_trial.start()
+
+        ground_truth = self.current_trial.ground_truth.name.lower()
+
+        self.marker_sender.send(
+            f"trial_start:{ground_truth}"
+        )
 
     def update(self, dt):
         if self.session_complete:
