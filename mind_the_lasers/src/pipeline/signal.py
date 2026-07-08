@@ -10,6 +10,8 @@ from pathlib import Path
 import mne
 import pyxdf
 
+DEFAULT_EEG_SCALE_TO_VOLTS = 1e-6
+
 @dataclass
 class EEGWindow:
     """Standardized container for continuous EEG data streams."""
@@ -33,9 +35,17 @@ class BaseStreamer(threading.Thread):
 
 class LSLStreamer(BaseStreamer):
     """Ingests live data from the hardware Lab Streaming Layer using a sliding window."""
-    def __init__(self, input_queue: multiprocessing.Queue, window_samples: int, stream_type: str = 'EEG', fs: int = 250):
+    def __init__(
+        self,
+        input_queue: multiprocessing.Queue,
+        window_samples: int,
+        stream_type: str = 'EEG',
+        fs: int = 250,
+        input_scale: float = DEFAULT_EEG_SCALE_TO_VOLTS,
+    ):
         super().__init__(input_queue, window_samples, fs)
         self.stream_type = stream_type
+        self.input_scale = float(input_scale)
         self.stride_samples = int(0.1 * self.fs) # 100ms stride
 
     def run(self):
@@ -84,13 +94,10 @@ class LSLStreamer(BaseStreamer):
                 buffer.extend(chunk)
 
                 while len(buffer) >= self.window_samples:
-                    window_data = (
-                        np.array(
-                            buffer[:self.window_samples],
-                            dtype=float,
-                        ).T
-                        * 1e-6
-                    )
+                    window_data = np.array(
+                        buffer[:self.window_samples],
+                        dtype=float,
+                    ).T * self.input_scale
 
                     try:
                         self.input_queue.put_nowait(
@@ -396,7 +403,7 @@ class EEGDataLoaderOffline:
         data = np.asarray(
             eeg_stream["time_series"],
             dtype=float,
-        ).T * 1e-6
+        ).T * DEFAULT_EEG_SCALE_TO_VOLTS
 
         sfreq = float(
             eeg_stream["info"]["nominal_srate"][0]

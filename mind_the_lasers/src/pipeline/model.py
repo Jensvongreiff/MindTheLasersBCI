@@ -1,12 +1,32 @@
 import os
 import pickle
-from pyexpat import features
 import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader
 from abc import ABC, abstractmethod
 from .signal import EEGWindow
+
+CLASS_LABELS = {
+    0: "left",
+    1: "right",
+    2: "rest",
+}
+
+
+def _probability_dict_from_classifier(classifier, probs: np.ndarray) -> dict:
+    classes = getattr(classifier, "classes_", None)
+    if classes is None:
+        classes = np.arange(len(probs))
+
+    result = {label: 0.0 for label in CLASS_LABELS.values()}
+
+    for class_id, probability in zip(classes, probs):
+        label = CLASS_LABELS.get(int(class_id))
+        if label is not None:
+            result[label] = float(probability)
+
+    return result
 
 # --- Base Classes ---
 class BaseClassifier(ABC):
@@ -76,8 +96,12 @@ class LDAWrapper(BaseClassifier):
             pickle.dump(self.lda, f)
 
     def predict_proba(self, features: np.ndarray) -> dict:
+        if self.lda is None:
+            raise RuntimeError(
+                f"No fitted LDA model is available at {self.model_path}."
+            )
         probs = self.lda.predict_proba(np.expand_dims(features, axis=0))[0]
-        return {"left": float(probs[0]), "right": float(probs[1]), "rest": float(probs[2])}
+        return _probability_dict_from_classifier(self.lda, probs)
 
 # --- End-To-End Model Wrapper ---
 class LDAWrapperTest(BaseClassifier):
@@ -120,8 +144,12 @@ class LDAWrapperTest(BaseClassifier):
             pickle.dump(self.lda, f)
 
     def predict_proba(self, features: np.ndarray) -> dict:
+        if self.lda is None:
+            raise RuntimeError(
+                f"No fitted LDA model is available at {self.model_path}."
+            )
         probs = self.lda.predict_proba(features.reshape(1, -1))[0]
-        return {"left": float(probs[0]), "right": float(probs[1]), "rest": float(probs[2])}
+        return _probability_dict_from_classifier(self.lda, probs)
 
 
 class EEGNetBCIWrapper(BaseEndToEndModel):
@@ -163,14 +191,22 @@ class EEGNetBCIWrapper(BaseEndToEndModel):
 
             self.model = EEGNet(nb_classes=self.n_classes, Chans=n_channels, Samples=n_samples)
 
-            if os.path.exists(self.weights_path):
-                self.model.load_state_dict(torch.load(self.weights_path, map_location='cpu', weights_only=True))
-            else:
-                print("Warning: No weights found. Running with untrained model.")
+            if not os.path.exists(self.weights_path):
+                raise FileNotFoundError(
+                    "No EEGNet weights found. Run the Mind the Lasers "
+                    "calibration/evaluation script first or pass the matching "
+                    f"suffix. Expected: {self.weights_path}"
+                )
+
+            self.model.load_state_dict(torch.load(self.weights_path, map_location='cpu', weights_only=True))
             
             self.model.eval()
             
         tensor_data = torch.tensor(window.data, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
         with torch.no_grad():
             probs = torch.softmax(self.model(tensor_data), dim=1).numpy()[0]
-        return {"left": float(probs[0]), "right": float(probs[1]), "rest": float(probs[2])}
+        return {
+            CLASS_LABELS[index]: float(probability)
+            for index, probability in enumerate(probs)
+            if index in CLASS_LABELS
+        }

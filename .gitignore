@@ -8,5 +8,6 @@ plots_MI/
 __pycache__/
 *.pkl
 *.json
+*.csv
 
 week6/results/

@@ -5,7 +5,7 @@ import argparse
 import pyxdf
 import numpy as np
 
-from mind_the_lasers.src.pipeline.signal import EEGWindow
+from mind_the_lasers.src.pipeline.signal import DEFAULT_EEG_SCALE_TO_VOLTS, EEGWindow
 from mind_the_lasers.src.pipeline.pipeline_config import build_pipeline
 from mind_the_lasers.src.pipeline.smoothing import SmoothingController
 
@@ -149,14 +149,20 @@ def main():
         "--baseline", 
         type=str, 
         default="csp-lda", 
-        choices=["csp-lda", "eegnet"],
+        choices=["csp-lda", "sos-csp-lda", "zp-csp-lda", "bp-lda", "eegnet"],
         help="BCI processing baseline track to evaluate"
     )
     parser.add_argument(
         "--suffix", 
         type=str, 
-        default="0001",
-        help="4-digit run suffix matching calibrated production weights"
+        default="latest",
+        help="Run suffix matching calibrated production weights, or latest."
+    )
+    parser.add_argument(
+        "--input-scale",
+        type=float,
+        default=DEFAULT_EEG_SCALE_TO_VOLTS,
+        help="Scale raw XDF EEG samples before inference; default converts microvolts to volts."
     )
     # ==========================================
     # 1. Configuration
@@ -165,6 +171,7 @@ def main():
     dataset_path = args.path
     baseline = args.baseline
     run_suffix = args.suffix
+    input_scale = args.input_scale
     
     fs = 250
     window_samples = int(fs * 1.0) 
@@ -195,7 +202,7 @@ def main():
         raise ValueError("Could not find both EEG and Marker streams in the .xdf file.")
 
     eeg_times = eeg_stream["time_stamps"]
-    eeg_data = eeg_stream["time_series"].T
+    eeg_data = eeg_stream["time_series"].T.astype(float) * input_scale
     
     marker_times = marker_stream["time_stamps"]
     marker_labels = [m[0] for m in marker_stream["time_series"]]
