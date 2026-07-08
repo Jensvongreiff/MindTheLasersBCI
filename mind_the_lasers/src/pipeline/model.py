@@ -64,6 +64,7 @@ class LDAWrapper(BaseClassifier):
         if os.path.exists(self.model_path):
             with open(self.model_path, 'rb') as f:
                 self.lda = pickle.load(f)
+            print(f"Loaded fitted LDA from {self.model_path}.")
 
     def fit(self, X: np.ndarray, y: np.ndarray):
         from sklearn.discriminant_analysis import LinearDiscriminantAnalysis

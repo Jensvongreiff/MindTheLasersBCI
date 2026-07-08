@@ -28,8 +28,8 @@ def main():
 
     parser.add_argument(
         "--baseline",
-        choices=["eegnet", "csp-lda", "bp-lda", "wavelet-lda"],
-        default="csp-lda",
+        choices=["eegnet", "zp-csp-lda", "bp-lda", "wavelet-lda"],
+        default="zp-csp-lda",
     )
 
     parser.add_argument(

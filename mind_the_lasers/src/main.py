@@ -20,8 +20,8 @@ def main():
 
     parser.add_argument(
         "--baseline",
-        choices=["csp-lda", "eegnet"],
-        default="csp-lda",
+        choices=["zp-csp-lda", "eegnet"],
+        default="zp-csp-lda",
     )
 
     parser.add_argument(

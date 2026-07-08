@@ -155,6 +155,7 @@ class CSPWrapper(BaseFeatureExtractor):
         if os.path.exists(self.model_path):
             with open(self.model_path, 'rb') as f:
                 self.csp = pickle.load(f)
+            print(f"Loaded fitted CSP from {self.model_path}.")
 
     def fit(self, X: np.ndarray, y: np.ndarray, sampling_rate: float | None = None):
         """Fits the Common Spatial Pattern filters using MNE decoding logic."""

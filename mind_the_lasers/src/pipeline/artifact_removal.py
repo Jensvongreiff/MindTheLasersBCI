@@ -66,6 +66,7 @@ class SpatialFilterICA(BaseArtifactRemoval):
 
         if os.path.exists(self.model_path):
             self.load_pickle(self.model_path)
+            print(f"Loaded fitted ICA from {self.model_path}.")
 
     @staticmethod
     def _import_mne():

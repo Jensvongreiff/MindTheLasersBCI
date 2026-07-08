@@ -96,14 +96,15 @@ def main():
     # ==========================================
     dataset_path = r"D:/Programming/BCI_Practical/practical-ss26-team4/data/sub-P999/sub-P999_ses-S009_task-Default_run-001_eeg.xdf" 
     
-    window_length = 1.5  # seconds
+    window_length = 1  # seconds
+    stride = 0.1 # milliseconds
 
     fs = 250
     window_samples = int(fs * window_length)  # window
-    stride_samples = int(fs * 0.1)  # 100ms stride (matching live LSL behavior)
+    stride_samples = int(fs * stride)  # stride (matching live LSL behavior)
     n_splits = 5                    # 5-Fold Cross Validation
     # baselines = ["csp-lda", "eegnet"]
-    baselines = ["csp-lda"]
+    baselines = ["zp-csp-lda"]
 
     # Matches the default mapping in EEGDataLoaderOffline
     label_map = {0: "left", 1: "right", 2: "rest"}
@@ -112,7 +113,7 @@ def main():
     # 2. Data Loading & Preparation
     # ==========================================
     print(f"Loading dataset: {dataset_path}")
-    data_loader = EEGDataLoaderOffline(data_path=dataset_path, window_length=window_length)
+    data_loader = EEGDataLoaderOffline(data_path=dataset_path, window_length=window_length, stride=stride)
     
     # The loader naturally splits 50/50. We recombine it to perform custom K-Fold splitting.
     X_train, X_test, y_train, y_test = data_loader.load_data(test_size=0.2)
