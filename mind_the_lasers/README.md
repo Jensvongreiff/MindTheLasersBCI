@@ -57,53 +57,54 @@ Raw probabilities generated every 100ms are too volatile for continuous runner m
 mind_the_lasers/
 │
 ├── src/
-│   ├── main.py                     # Launches streamer, pipeline and/or game
+│   ├── main.py                          # Launches streamer, pipeline and/or game
 │   │
 │   ├── game/
-│   │   ├── run_game.py             # Game entry point
-│   │   ├── game.py                 # Main game loop
-│   │   ├── input_controller.py     # UDP controller and command definitions
-│   │   ├── player.py               # Player movement, boost and lives
-│   │   ├── laser.py                # Sweeping laser obstacle implementation
-│   │   ├── level.py                # Level class and progression logic
-│   │   ├── levels.py               # Collection of game levels
-│   │   ├── game_metrics.py         # Gameplay metrics and game-session logging
-│   │   ├── training_mode.py        # Training mode implementation
-│   │   ├── training_logger.py      # Training trial logging
-│   │   ├── training_trial.py       # Training trial implementation
-│   │   ├── mode_select.py          # Training/play mode selection screen
-│   │   └── settings.py             # Global game constants
+│   │   ├── run_game.py                  # Game entry point
+│   │   ├── game.py                      # Main game loop
+│   │   ├── input_controller.py          # UDP controller and command definitions
+│   │   ├── player.py                    # Player movement, boost and lives
+│   │   ├── laser.py                     # Sweeping laser obstacle implementation
+│   │   ├── level.py                     # Level class and progression logic
+│   │   ├── levels.py                    # Collection of game levels
+│   │   ├── game_metrics.py              # Gameplay metrics and game-session logging
+│   │   ├── training_mode.py             # Training mode implementation
+│   │   ├── training_logger.py           # Training trial logging
+│   │   ├── training_trial.py            # Training trial implementation
+│   │   ├── mode_select.py               # Training/play mode selection screen
+│   │   └── settings.py                  # Global game constants
 │   │
 │   ├── pipeline/
-│   │   ├── run_pipeline.py         # Pipeline entry point
-│   │   ├── pipeline_config.py      # Pipeline configuration and model loading
-│   │   ├── pipeline_constructor.py # BCIPipeline and worker process
-│   │   ├── prediction_sender.py    # Sends decoded predictions over UDP
-│   │   ├── signal.py               # LSL streamers, offline loader and EEGWindow
-│   │   ├── filtering.py            # EEG filtering implementations
-│   │   ├── artifact_removal.py     # Artifact removal implementations
-│   │   ├── feature_extraction.py   # CSP and feature extraction implementations
-│   │   ├── model.py                # EEGNet and LDA model wrappers
-│   │   ├── smoothing.py            # Prediction rejection and smoothing logic
-│   │   ├── decoder_metrics.py      # Decoder evaluation metrics
-│   │   └── weights/                # Serialized fitted pipeline weights
+│   │   ├── run_pipeline.py              # Pipeline entry point
+│   │   ├── pipeline_config.py           # Pipeline configuration and model loading
+│   │   ├── pipeline_constructor.py      # BCIPipeline and worker process
+│   │   ├── prediction_sender.py         # Sends decoded predictions over UDP
+│   │   ├── signal.py                    # LSL streamers, offline loader and EEGWindow
+│   │   ├── filtering.py                 # EEG filtering implementations
+│   │   ├── artifact_removal.py          # Artifact removal implementations
+│   │   ├── feature_extraction.py        # CSP and feature extraction implementations
+│   │   ├── model.py                     # EEGNet and LDA model wrappers
+│   │   ├── smoothing.py                 # Prediction rejection and smoothing logic
+│   │   ├── decoder_metrics.py           # Decoder evaluation metrics
+│   │   └── weights/                     # Serialized fitted pipeline weights
 │   │       ├── csp.pkl
 │   │       ├── lda.pkl
 │   │       ├── ica.pkl
 │   │       └── eegnet.pt
 │   │
 │   ├── stream/
-│   │   ├── streamer.py             # Replays XDF recordings as LSL streams
-│   │   ├── marker_sender.py        # Publishes game/training markers over LSL
-│   │   └── key_press.py            # Keyboard prediction sender over UDP
+│   │   ├── streamer.py                  # Replays XDF recordings as LSL streams
+│   │   ├── marker_sender.py             # Publishes game/training markers over LSL
+│   │   └── key_press.py                 # Keyboard prediction sender over UDP
 │   │
 │   ├── logs/
-│   │   ├── game_logs/              # CSV logs from play-mode sessions
-│   │   └── training_logs/          # CSV logs from training-mode sessions
+│   │   ├── game_logs/                   # CSV logs from play-mode sessions
+│   │   └── training_logs/               # CSV logs from training-mode sessions
 │   │
 │   ├── visualization/
-│   │   ├── visualize_play.py       # Visualizes gameplay metrics from CSV logs
-│   │   └── visualize_training.py   # Visualizes training metrics from CSV logs
+│   │   ├── visualize_decoder_metrics.py # Visualizes decoder metrics from CSV logs
+│   │   ├── visualize_play.py            # Visualizes gameplay metrics from CSV logs
+│   │   └── visualize_training.py        # Visualizes training metrics from CSV logs
 │   │
 │   └── tests/
 │       └── ...                      # Pipeline evaluation and automated tests
@@ -193,7 +194,7 @@ python -m mind_the_lasers.src.stream.streamer /path/to/recording.xdf
 ```bash
 python -m mind_the_lasers.src.pipeline.run_pipeline \
     --mode live \
-    --baseline csp-lda
+    --baseline zp-csp-lda
 ```
 
 #### 3. Launch the game
@@ -209,3 +210,10 @@ python -m mind_the_lasers.src.stream.key_press
 ```
 
 This modular execution allows each subsystem (streaming, classification, communication, and gameplay) to be tested independently before performing a full end-to-end experiment.
+
+#### 5. Visualize decoding metrics
+
+```bash
+python -m mind_the_lasers.src.visualization.visualize_decoder_metrics --json mind_the_lasers/reports/decoder_summary_eegnet_0001.json mind_the_lasers/reports/decoder_summary_zp-csp-lda_0001.json
+```
+
