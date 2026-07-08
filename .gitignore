@@ -9,5 +9,6 @@ __pycache__/
 *.pkl
 *.json
 *.csv
+*.pt
 
 week6/results/
