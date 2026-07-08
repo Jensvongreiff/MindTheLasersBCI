@@ -337,6 +337,28 @@ class Game:
             ),
         )
 
+        score_text = self.big_font.render(
+            f"{summary['overall_score']:.1f}",
+            True,
+            (255, 215, 0),
+        )
+
+        self.screen.blit(
+            score_text,
+            score_text.get_rect(topright=(WIDTH - 40, 35)),
+        )
+
+        label = self.font.render(
+            "SCORE",
+            True,
+            (230, 230, 230),
+        )
+
+        self.screen.blit(
+            label,
+            label.get_rect(topright=(WIDTH - 40, 95)),
+        )
+
 
     def _goal_direction(self):
         if self.level.goal_x > self.level.start_x:
