@@ -20,6 +20,7 @@ class BCIPipeline:
     ):
         self.filter_step = filter_step
         self.artifact_step = artifact_step
+        self.data_loader = data_loader
 
         if end_to_end_model is not None:
             self.model_path = 'end_to_end'
@@ -35,10 +36,17 @@ class BCIPipeline:
 
         # 1. Apply matching causal filter to the offline batch array
         if self.filter_step:
-            print("Applying causal filter to training data to match online phase...")
-            X_train = sig.lfilter(self.filter_step.b, self.filter_step.a, X_train, axis=2)
-            # Common Average Reference (CAR) is applied after filtering
-            X_train = X_train - X_train.mean(axis=1, keepdims=True)
+            # print("Applying causal filter to training data to match online phase...")
+            # X_train = sig.lfilter(self.filter_step.b, self.filter_step.a, X_train, axis=2)
+            # # Common Average Reference (CAR) is applied after filtering
+            # X_train = X_train - X_train.mean(axis=1, keepdims=True)
+
+            print("Applying filter to training data...")
+
+            X_train = self.filter_step.process_batch(
+                X_train,
+                sampling_rate=self.data_loader.sampling_rate,
+            )
 
 
         if self.artifact_step:
