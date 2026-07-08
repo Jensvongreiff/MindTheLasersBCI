@@ -10,6 +10,7 @@ import os
 import re
 import json
 import time
+import argparse
 import numpy as np
 from pathlib import Path
 from sklearn.model_selection import StratifiedKFold
@@ -91,20 +92,46 @@ def aggregate_reports(reports: list[dict]) -> dict:
     return summary
 
 def main():
+    parser = argparse.ArgumentParser(
+        description="Evaluate and export Mind the Lasers decoder weights."
+    )
+    parser.add_argument(
+        "--dataset",
+        default="data/sub-P999/sub-P999_ses-S009_task-Default_run-001_eeg.xdf",
+        help="XDF calibration recording.",
+    )
+    parser.add_argument(
+        "--baselines",
+        default="csp-lda",
+        help="Comma-separated baselines, e.g. csp-lda,eegnet.",
+    )
+    parser.add_argument("--folds", type=int, default=5)
+    parser.add_argument("--window-length", type=float, default=1.0)
+    parser.add_argument("--stride", type=float, default=0.1)
+    parser.add_argument("--test-size", type=float, default=0.2)
+    parser.add_argument(
+        "--suffix",
+        default=None,
+        help="Optional explicit output suffix. Defaults to next report number.",
+    )
+    args = parser.parse_args()
+
     # ==========================================
     # 1. Configuration
     # ==========================================
-    dataset_path = r"D:/Programming/BCI_Practical/practical-ss26-team4/data/sub-P999/sub-P999_ses-S009_task-Default_run-001_eeg.xdf" 
+    dataset_path = args.dataset
     
-    window_length = 1  # seconds
-    stride = 0.1 # milliseconds
+    window_length = args.window_length  # seconds
+    stride = args.stride
 
     fs = 250
     window_samples = int(fs * window_length)  # window
-    stride_samples = int(fs * stride)  # stride (matching live LSL behavior)
-    n_splits = 5                    # 5-Fold Cross Validation
-    # baselines = ["csp-lda", "eegnet"]
-    baselines = ["zp-csp-lda"]
+    n_splits = args.folds
+    baselines = [
+        baseline.strip()
+        for baseline in args.baselines.split(",")
+        if baseline.strip()
+    ]
 
     # Matches the default mapping in EEGDataLoaderOffline
     label_map = {0: "left", 1: "right", 2: "rest"}
@@ -115,12 +142,38 @@ def main():
     print(f"Loading dataset: {dataset_path}")
     data_loader = EEGDataLoaderOffline(data_path=dataset_path, window_length=window_length, stride=stride)
     
-    # The loader naturally splits 50/50. We recombine it to perform custom K-Fold splitting.
-    X_train, X_test, y_train, y_test = data_loader.load_data(test_size=0.2)
+    # load_data() splits at source-epoch level before creating windows. We
+    # recombine, regroup windows by source epoch, and K-fold at group level to
+    # avoid overlapping-window leakage between train and test folds.
+    X_train, X_test, y_train, y_test = data_loader.load_data(test_size=args.test_size)
     X = np.concatenate([X_train, X_test], axis=0)
     y = np.concatenate([y_train, y_test], axis=0)
 
-    print(f"Total epochs available: {X.shape[0]}")
+    n_windows_per_epoch = int(data_loader.n_windows_per_epoch)
+    if n_windows_per_epoch <= 0 or len(y) % n_windows_per_epoch != 0:
+        raise RuntimeError(
+            "Cannot regroup sliding windows into source epochs. "
+            f"n_windows_per_epoch={n_windows_per_epoch}, n_windows={len(y)}."
+        )
+
+    X_by_epoch = X.reshape(
+        -1,
+        n_windows_per_epoch,
+        X.shape[1],
+        X.shape[2],
+    )
+    y_by_epoch = y.reshape(-1, n_windows_per_epoch)
+
+    if not np.all(y_by_epoch == y_by_epoch[:, :1]):
+        raise RuntimeError(
+            "Window groups do not have consistent labels. "
+            "The evaluator can no longer guarantee no leakage."
+        )
+
+    y_epoch = y_by_epoch[:, 0]
+
+    print(f"Total source epochs available: {X_by_epoch.shape[0]}")
+    print(f"Total windows available: {X.shape[0]}")
 
     skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
 
@@ -133,14 +186,16 @@ def main():
         print(f"{'='*40}")
         fold_reports = []
 
-        run_suffix = get_next_run_number(baseline)
+        run_suffix = args.suffix or get_next_run_number(baseline)
         out_filepath = os.path.join("mind_the_lasers/reports", f"decoder_summary_{baseline}_{run_suffix}.json")
 
-        for fold, (train_idx, test_idx) in enumerate(skf.split(X, y), 1):
+        for fold, (train_idx, test_idx) in enumerate(skf.split(X_by_epoch, y_epoch), 1):
             print(f"\n--- Fold {fold}/{n_splits} ---")
 
-            X_train_fold, X_test_fold = X[train_idx], X[test_idx]
-            y_train_fold, y_test_fold = y[train_idx], y[test_idx]
+            X_train_fold = X_by_epoch[train_idx].reshape(-1, X.shape[1], X.shape[2])
+            X_test_fold = X_by_epoch[test_idx].reshape(-1, X.shape[1], X.shape[2])
+            y_train_fold = np.repeat(y_epoch[train_idx], n_windows_per_epoch)
+            y_test_fold = np.repeat(y_epoch[test_idx], n_windows_per_epoch)
 
             # Initialize isolated components
             pipeline = build_pipeline(baseline, window_samples, suffix="temp")
@@ -150,41 +205,36 @@ def main():
             pipeline.data_loader = data_loader
 
             pipeline.calibrate(
-                X_train,
-                y_train,
+                X_train_fold,
+                y_train_fold,
             )
-            # Simulate the continuous sliding window over the test epochs
-            for trial_idx, (trial_data, label) in enumerate(zip(X_test_fold, y_test_fold)):
+            # Evaluate the held-out sliding windows exactly once.
+            for window_data, label in zip(X_test_fold, y_test_fold):
                 ground_truth_str = label_map[label]
-                n_samples = trial_data.shape[1]
-                
-                # Slide window across the 3-second epoch (mimicking LSL Streamer)
-                for i in range(0, n_samples - window_samples + 1, stride_samples):
-                    window_data = trial_data[:, i:i+window_samples]
 
-                    window = EEGWindow(
-                        data=window_data, 
-                        sampling_rate=fs, 
-                        timestamp=time.time(),
-                        ground_truth=ground_truth_str
-                    )
+                window = EEGWindow(
+                    data=window_data,
+                    sampling_rate=fs,
+                    timestamp=time.time(),
+                    ground_truth=ground_truth_str
+                )
 
-                    # 1. Inference
-                    t_start = time.perf_counter()
-                    probs = pipeline.process_window(window)
-                    latency = time.perf_counter() - t_start
+                # 1. Inference
+                t_start = time.perf_counter()
+                probs = pipeline.process_window(window)
+                latency = time.perf_counter() - t_start
 
-                    # 2. Smoothing
-                    pred_label, conf, rejected = smoothing.process(probs)
+                # 2. Smoothing
+                pred_label, conf, rejected = smoothing.process(probs)
 
-                    # 3. Metric Logging
-                    evaluator.log_step(
-                        truth=ground_truth_str,
-                        pred=pred_label,
-                        confidence=conf,
-                        rejected=rejected,
-                        latency=latency
-                    )
+                # 3. Metric Logging
+                evaluator.log_step(
+                    truth=ground_truth_str,
+                    pred=pred_label,
+                    confidence=conf,
+                    rejected=rejected,
+                    latency=latency
+                )
 
             # Generate report dict without saving to disk
             fold_reports.append(evaluator.generate_report(f"{baseline}_temp", save=False))

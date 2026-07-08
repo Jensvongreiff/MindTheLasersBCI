@@ -33,6 +33,13 @@ class BCIPipeline:
     def calibrate(self, X_train, y_train):
         """Fits the pipeline models given an analytical offline training set."""
         print(f"\nCalibrating Pipeline on Dataset: {X_train.shape}...")
+        if self.data_loader is None:
+            raise ValueError(
+                "BCIPipeline.calibrate() requires data_loader to provide "
+                "sampling rate and channel labels."
+            )
+
+        X_train_for_artifacts = X_train
 
         # 1. Apply matching causal filter to the offline batch array
         if self.filter_step:
@@ -52,8 +59,13 @@ class BCIPipeline:
         if self.artifact_step:
             if self.artifact_step.channel_names is None:
                 self.artifact_step.channel_names = self.data_loader.channel_labels
-            # # Fitting ICA to unfiltered training data to learn the unmixing matrix for artifact removal
-            self.artifact_step.fit(self.data_loader.load_data()[0], sampling_rate=self.data_loader.sampling_rate)
+            # Fit ICA on this calibration split only. Calling load_data()
+            # here would silently refit ICA on a different split.
+            self.artifact_step.fit(
+                X_train_for_artifacts,
+                sampling_rate=self.data_loader.sampling_rate,
+                channel_names=self.data_loader.channel_labels,
+            )
             X_train = self.artifact_step.transform(X_train, sampling_rate=self.data_loader.sampling_rate)
 
         # 2. Proceed to fit the models
