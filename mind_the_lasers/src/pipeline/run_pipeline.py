@@ -29,7 +29,7 @@ def main():
 
     parser.add_argument(
         "--baseline",
-        choices=["csp-lda", "sos-csp-lda", "zp-csp-lda", "bp-lda", "eegnet"],
+        choices=["csp-lda", "sos-csp-lda", "zp-csp-lda", "bp-lda", "eegnet", "zp-bp-lda", "zp-rm-lda"],
         default="csp-lda",
     )
 

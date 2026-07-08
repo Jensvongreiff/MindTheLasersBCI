@@ -4,12 +4,13 @@ import re
 from .pipeline_constructor import BCIPipeline
 from .filtering import IIRBandpassFilter, OfflineZeroPhaseBandpassCARFilter, OfflineCausalSOSBandpassCARFilter
 from .artifact_removal import SpatialFilterICA
-from .feature_extraction import CSPWrapper, BandpowerFeatureExtractor
+from .feature_extraction import CSPWrapper, BandpowerFeatureExtractor, RiemannianTangentSpaceFeatureExtractor
 from .model import EEGNetBCIWrapper, LDAWrapper, LDAWrapperTest
 
 
 BASELINE_ALIASES = {
     "csp-lda": "sos-csp-lda",
+    "bp" : "zp-bp-lda",
 }
 
 
@@ -174,7 +175,7 @@ def build_pipeline(baseline: str, window_samples: int, suffix: str = "") -> BCIP
             ),
         )
     
-    elif baseline == "bp-lda":
+    elif baseline == "zp-bp-lda":
         ica_path = os.path.join(
             base_dir,
             "weights",
@@ -189,9 +190,33 @@ def build_pipeline(baseline: str, window_samples: int, suffix: str = "") -> BCIP
         )
 
         return BCIPipeline(
-            filter_step=IIRBandpassFilter(lowcut=8.0, highcut=30.0, fs=250),
+            filter_step=OfflineZeroPhaseBandpassCARFilter(),
             feature_step=BandpowerFeatureExtractor(),
-            # artifact_step= SpatialFilterICA(model_path=ica_path),
+            artifact_step= SpatialFilterICA(model_path=ica_path),
+            classifier_step=LDAWrapperTest(
+                model_path=lda_path,
+            ),
+        )
+
+    elif baseline == "zp-rm-lda":
+
+        ica_path = os.path.join(
+            base_dir,
+            "weights",
+            f"ica{ext}.pkl",
+            )
+
+
+        lda_path = os.path.join(
+            base_dir,
+            "weights",
+            f"lda{ext}.pkl",
+        )
+
+        return BCIPipeline(
+            filter_step=OfflineZeroPhaseBandpassCARFilter(),
+            feature_step=RiemannianTangentSpaceFeatureExtractor(),
+            artifact_step= SpatialFilterICA(model_path=ica_path),
             classifier_step=LDAWrapperTest(
                 model_path=lda_path,
             ),
@@ -200,5 +225,7 @@ def build_pipeline(baseline: str, window_samples: int, suffix: str = "") -> BCIP
     raise ValueError(
         "Unknown baseline "
         f"{baseline!r}. Expected one of: csp-lda, sos-csp-lda, "
-        "zp-csp-lda, bp-lda, eegnet."
+        "zp-csp-lda, bp-lda, eegnet, zp-bp-lda, zp-rm-lda."
     )
+
+
