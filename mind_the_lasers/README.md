@@ -217,3 +217,12 @@ This modular execution allows each subsystem (streaming, classification, communi
 python -m mind_the_lasers.src.visualization.visualize_decoder_metrics --json mind_the_lasers/reports/decoder_summary_eegnet_0001.json mind_the_lasers/reports/decoder_summary_zp-csp-lda_0001.json
 ```
 
+#### 5. Visualize game metrics
+
+```bash
+python -m mind_the_lasers.src.visualization.visualize_training
+```
+
+```bash
+python -m mind_the_lasers.src.visualization.visualize_play
+```

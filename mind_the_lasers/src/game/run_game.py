@@ -93,8 +93,7 @@ def main():
                     training_mode = TrainingMode(
                         screen,
                         controller,
-                        marker_sender,
-                        trials_per_command=5,
+                        marker_sender
                     )
 
                     current_mode = "training"

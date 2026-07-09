@@ -7,6 +7,7 @@ from mind_the_lasers.src.game.settings import *
 from mind_the_lasers.src.game.training_logger import TrainingLogger
 from mind_the_lasers.src.game.training_trial import TrainingTrial
 
+from mind_the_lasers.src.game.settings import *
 
 class TrainingMode:
     def __init__(
@@ -14,7 +15,7 @@ class TrainingMode:
         screen,
         controller,
         marker_sender,
-        trials_per_command=5,
+        trials_per_command=TRAINING_TRIALS_PER_COMMAND,
     ):
         self.screen = screen
         self.controller = controller
@@ -46,6 +47,9 @@ class TrainingMode:
         self.summary = None
 
         self.prediction_received = False
+
+        self.command_delay_timer = 0.0
+        self.command_delay_finished = False
 
 
         self.load_trial()
@@ -116,6 +120,9 @@ class TrainingMode:
         self.prediction_received = False
         self.controller.reset()
 
+        self.command_delay_timer = 0.0
+        self.command_delay_finished = False
+
         self.current_trial.start()
 
         ground_truth = self.current_trial.ground_truth.name.lower()
@@ -132,19 +139,32 @@ class TrainingMode:
 
         trial = self.current_trial
 
-        # Waiting for classifier decision.
-        if not trial.decision_made and not self.prediction_received:
-            prediction = self.controller.get_new_prediction()
+        if not trial.decision_made:
+            if not self.command_delay_finished:
+                self.command_delay_timer += dt
 
-            if prediction is not None:
-                self.prediction_received = True
+                # Drain predictions received during the preparation period.
+                self.controller.get_new_prediction()
 
-                confidence = self.controller.confidence
+                if self.command_delay_timer >= TRAINING_COMMAND_DELAY:
+                    self.command_delay_finished = True
 
-                self._handle_decision(
-                    prediction,
-                    confidence,
-                )
+                    # Clear anything still buffered before opening
+                    # the decision window.
+                    self.controller.reset()
+
+            elif not self.prediction_received:
+                prediction = self.controller.get_new_prediction()
+
+                if prediction is not None:
+                    self.prediction_received = True
+
+                    confidence = self.controller.confidence
+
+                    self._handle_decision(
+                        prediction,
+                        confidence,
+                    )
 
         # Decision has already been made.
         else:
