@@ -1,199 +1,228 @@
-# BCI Practical SS26 - Team 4
+# Mind The Lasers
 
-⚠️For Week 6 we have different branches for domain adaptation, online adaptation and domain generalization. Please check the READMEs in week6 of each branch for implementation details. 
+**Technical University of Munich (TUM) - BCI Practical Course SS26**
+**Team 4:** Daniel Cortez de Oliveira Marche Barros, Jens von Greiff, Martin Waxenberger
 
-Welcome to the repository for Team 4's Brain-Computer Interface (BCI) Practical Course project at TUM. This repository documents our progress in building a complete BCI pipeline, using the `baseline-bci-26` repository as our foundational blueprint and tutorial.
+## 1. Project Overview
 
-## 👥 Team Members
-* **Daniel Cortez de Oliveira Marche Barros**
-* **Jens von Greiff**
-* **Martin Waxenberger**
+Mind The Lasers is a timing-based BCI game designed to evaluate motor imagery EEG decoders in an interactive setting. The player controls a colored ball that moves horizontally across the screen while avoiding vertical laser beams. The decoder outputs one of three commands: left, right, or rest. Movement commands start the ball moving in the corresponding direction, while rest stops the ball.
+
+The game includes two modes. Training Mode presents structured left, right, and rest trials with clear ground-truth commands and logs decoder performance. Play Mode uses the same command interface in a dynamic game environment with levels, lives, lasers, boost mechanics, and gameplay metrics.
+
+The project combines a real-time EEG processing pipeline with a Pygame-based game. EEG data can come from live LSL streams or replayed XDF recordings. The pipeline processes EEG windows, produces decoded predictions, optionally smooths them, and sends commands to the game over UDP. This separation allows the game, classifier, stream replay, keyboard simulation, and evaluation tools to be tested independently.
+
+## 2. Command Mapping & Game Strategy
+
+The game utilizes a strictly three-class paradigm mapped to discrete movements:
+
+* **Left Motor Imagery:** Move Left
+* **Right Motor Imagery:** Move Right
+* **Rest (Idle):** Stop And Charge Boost
+
+### Coping with Imperfect BCI
+
+To ensure the game remains engaging despite classifier inaccuracies, we implemented a fail-forward mechanical design:
+
+* **Strategic Misclassification:** Because lasers act as binary obstacles in specific lanes, an incorrect lateral classification might inadvertently move the player out of danger.
+* **The Rest/Boost Mechanic:** Deliberately resting (maintaining the "Idle" class) charges a movement boost. If a player is resting outside of laser range, they are rewarded with a speed boost for their next movement. If they are resting inside laser range, the accumulated boost allows them to rapidly escape the situation upon their next directional command.
+
+## 3. System Architecture & Pipeline
+
+The software architecture strictly separates the synchronous Pygame rendering loop from the heavy asynchronous numerical computations required for EEG processing. This is achieved via Python's `multiprocessing` library.
+
+### 3.1 Data Ingestion (`signal.py`)
+
+* **Live Mode:** Utilizes Lab Streaming Layer (LSL) to connect to the EEG amplifier. It maintains a rolling buffer, extracting a predefined window (e.g., 1 second of data at 250Hz) and sliding forward with a specific stride (e.g., 100ms) to ensure continuous, high-frequency control updates.
+* **Offline Simulation Mode:** Parses the BCI Competition IV 2a dataset, synthesizes the "Rest" class from the pre-cue fixation periods, splits the data 50/50 for calibration/testing, and streams the matrices through the pipeline mimicking exact hardware latency.
+
+### 3.2 Signal Processing (`filtering.py` & `artifact_removal.py`)
+
+* **IIR Bandpass:** A causal 8-30Hz Butterworth filter (`scipy.signal.lfilter`) is applied to isolate the Mu and Beta bands necessary for MI detection without looking into the "future" of the signal window.
+* **Spatial Filtering (ICA):** An MNE-based Independent Component Analysis module fits spatial unmixing matrices during the calibration phase and applies them via fast matrix multiplication during the live game loop to reject artifact components (e.g., blinks).
+
+### 3.3 Classification Baselines (`model.py` & `feature_extraction.py`)
+
+The orchestrator supports dynamic swapping of the classification backbone:
+
+1. **End-to-End Deep Learning:** A native PyTorch implementation of `EEGNet`.
+2. **Traditional Machine Learning:** A Common Spatial Pattern (CSP) feature extractor coupled with Linear Discriminant Analysis (LDA) via `mne` and `scikit-learn`.
+
+### 3.4 Command Smoothing (`smoothing.py`)
+
+Raw probabilities generated every 100ms are too volatile for continuous runner mechanics. The `SmoothingController` maintains a state buffer of size $N$. It applies a confidence threshold (default 60%); if the maximum probability falls below this, the output defaults to "Rest." If it passes, the class is appended to the buffer, and a majority vote dictates the final game command.
+
+## 4. Repository Structure
+
+```text
+mind_the_lasers/
+│
+├── src/
+│   ├── main.py                          # Launches streamer, pipeline and/or game
+│   │
+│   ├── game/
+│   │   ├── run_game.py                  # Game entry point
+│   │   ├── game.py                      # Main game loop
+│   │   ├── input_controller.py          # UDP controller and command definitions
+│   │   ├── player.py                    # Player movement, boost and lives
+│   │   ├── laser.py                     # Sweeping laser obstacle implementation
+│   │   ├── level.py                     # Level class and progression logic
+│   │   ├── levels.py                    # Collection of game levels
+│   │   ├── game_metrics.py              # Gameplay metrics and game-session logging
+│   │   ├── training_mode.py             # Training mode implementation
+│   │   ├── training_logger.py           # Training trial logging
+│   │   ├── training_trial.py            # Training trial implementation
+│   │   ├── mode_select.py               # Training/play mode selection screen
+│   │   └── settings.py                  # Global game constants
+│   │
+│   ├── pipeline/
+│   │   ├── run_pipeline.py              # Pipeline entry point
+│   │   ├── pipeline_config.py           # Pipeline configuration and model loading
+│   │   ├── pipeline_constructor.py      # BCIPipeline and worker process
+│   │   ├── prediction_sender.py         # Sends decoded predictions over UDP
+│   │   ├── signal.py                    # LSL streamers, offline loader and EEGWindow
+│   │   ├── filtering.py                 # EEG filtering implementations
+│   │   ├── artifact_removal.py          # Artifact removal implementations
+│   │   ├── feature_extraction.py        # CSP and feature extraction implementations
+│   │   ├── model.py                     # EEGNet and LDA model wrappers
+│   │   ├── smoothing.py                 # Prediction rejection and smoothing logic
+│   │   ├── decoder_metrics.py           # Decoder evaluation metrics
+│   │   └── weights/                     # Serialized fitted pipeline weights
+│   │       ├── csp.pkl
+│   │       ├── lda.pkl
+│   │       ├── ica.pkl
+│   │       └── eegnet.pt
+│   │
+│   ├── stream/
+│   │   ├── streamer.py                  # Replays XDF recordings as LSL streams
+│   │   ├── marker_sender.py             # Publishes game/training markers over LSL
+│   │   └── key_press.py                 # Keyboard prediction sender over UDP
+│   │
+│   ├── logs/
+│   │   ├── game_logs/                   # CSV logs from play-mode sessions
+│   │   └── training_logs/               # CSV logs from training-mode sessions
+│   │
+│   ├── visualization/
+│   │   ├── visualize_decoder_metrics.py # Visualizes decoder metrics from CSV logs
+│   │   ├── visualize_play.py            # Visualizes gameplay metrics from CSV logs
+│   │   └── visualize_training.py        # Visualizes training metrics from CSV logs
+│   │
+│   └── tests/
+│       └── ...                      # Pipeline evaluation and automated tests
+│
+└── README.md
+```
+
+
+## 5. Execution Logic
+
+The project can be launched either through a single entry point (`src/main.py`) or by starting each component independently for debugging and development.
+
+### Main Entry Point
+
+The entire system is launched through:
+
+```bash
+python -m mind_the_lasers.src.main
+```
+
+The following command-line arguments are available:
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `--mode` | Data source: `live` (LSL stream) or `offline` (XDF replay) | `live` |
+| `--controller` | Input source: `pipeline`, `keyboard`, or `both` | `pipeline` |
+| `--baseline` | Classifier backend: `csp-lda` or `eegnet` | `csp-lda` |
+| `--xdf` | Path to an XDF recording (required only in offline mode) | — |
+| `--ip` | UDP destination IP | `127.0.0.1` |
+| `--port` | UDP destination port | `5005` |
+
+### Example Usage
+
+**Live BCI session**
+
+Uses an existing LSL EEG stream.
+
+```bash
+python -m mind_the_lasers.src.main \
+    --mode live \
+    --controller pipeline \
+    --baseline csp-lda
+```
+
+**Offline replay from an XDF recording**
+
+Replays a previously recorded session while running the classifier and the game.
+
+```bash
+python -m mind_the_lasers.src.main \
+    --mode offline \
+    --xdf /path/to/recording.xdf
+```
+
+**Keyboard-only control**
+
+Useful for testing gameplay without running the pipeline.
+
+```bash
+python -m mind_the_lasers.src.main \
+    --controller keyboard
+```
+
+**Keyboard and pipeline simultaneously**
+
+Useful for debugging while allowing manual override.
+
+```bash
+python -m mind_the_lasers.src.main \
+    --controller both
+```
 
 ---
 
-## ⚙️ Environment Setup & Installation
+### Running Individual Processes
 
-**⚠️ Important Notice Regarding OS Compatibility:** 
+For debugging, each component can also be started independently.
 
-This repository is primarily Windows-compatible. For different operating systems, full functionality was not tested.
-
-### Local Installation 
-To set up the local repository path and install dependencies using `uv`:
+#### 1. Replay an XDF recording as an LSL stream
 
 ```bash
-# Clone the repository
-git clone <repository-url>
-cd practical-ss26-team4
-
-# Sync dependencies using uv
-uv sync
+python -m mind_the_lasers.src.stream.streamer /path/to/recording.xdf
 ```
-Additionally for pytorch CUDA GPU usage:
+
+#### 2. Run the BCI pipeline
+
 ```bash
-#Check both
-#for cuda version
-nvcc --version
-#driver version
-nvidia-smi
-#if cuda and driver are available, check which pytorch cuda wheel you need to install. cu132 is preinstalled.
+python -m mind_the_lasers.src.pipeline.run_pipeline \
+    --mode live \
+    --baseline zp-csp-lda
 ```
 
-Replace the url of torch in pyproject toml with the device-specific pytorch cuda url from https://pytorch.org/get-started/locally/
-if errors occur, try installing torchvision from the same url
+#### 3. Launch the game
 
-
-### Running files for assignments
-This is the most reliable way to run files in the current project format:
 ```bash
-# Run the respective files in this form
-uv run python -m weekX.filename
-
-# Example
-uv run python -m week4.feature_extraction
-
+python -m mind_the_lasers.src.game.run_game
 ```
 
-### Project Roadmap & Submissions
+#### 4. Send manual keyboard predictions
 
-This project is structured around iterative submissions, moving from theoretical foundations to online BCI deployment.
-### Submission 1: State of the Art Paper Review
-
-For our initial theoretical foundation, our team analyzed and presented three recent papers focusing on advanced deep learning architectures and error potential detection for BCI applications:
-
-    TCACNet: Explored Temporal and Channel Attention Convolutional Networks for Motor Imagery (MI) classification, noting its lightweight model advantages (<10 ms inference).
-
-    ErrP Detection: Reviewed feature-based detection of Error-Related Potentials for Human-Robot Interaction.
-
-    IFNet: Analyzed the Interactive Frequency Convolutional Neural Network for robust EEG decoding.
-
-### Submission 2: Signal Preprocessing & Characterization (Week 3)
-
-This phase focused on cleaning and analyzing raw EEG data to prepare it for feature extraction and classification.
-
-    Filtering Implementation: 
-    Evaluated multiple filter candidates, ultimately selecting a 4th-order IIR Butterworth filter over higher-tap FIR filters for optimal magnitude response and latency tradeoffs.
-
-    Artifact Removal: 
-    Applied Independent Component Analysis (ICA) to identify and remove ocular and muscular artifacts from the raw signal.
-
-    Signal Characterization: 
-    Analyzed Event-Related Desynchronization/Synchronization (ERD/ERS) in Mu (8-13 Hz) and Beta (13-30 Hz) bands over motor channels (C3, Cz, C4) during left/right-hand motor imagery tasks. Generated ERD/ERS time courses, power spectral density plots, ERP averages, and time-frequency representations.
-
-### Submission 3: Feature Extraction & Classification (Week 4)
-
-In this phase, we implemented and evaluated four distinct feature extraction methods to classify Left vs. Right hand Motor Imagery:
-
-    Band-power PSD: 
-    Log-variance in subject-specific Mu and Beta bands.
-
-    CSP (Common Spatial Pattern): 
-    4 filters applied to the Mu+Beta bandpass.
-
-    Morlet Wavelets: 
-    Log-amplitude at 8/10/12/20/24 Hz.
-
-    Riemannian MDM (Custom Method): 
-    Classification directly on spatial covariance matrices using Riemannian geometry.
-
-Key Insights:
-
-    While CSP achieved the highest within-session accuracy (72.1%), it suffered from a severe transfer gap (+19.4% drop) when tested cross-session due to over-optimizing to specific spatial patterns.
-
-    Riemannian MDM emerged as the most robust architecture for real-world deployment, achieving the highest cross-session accuracy (64.0%) with minimal transfer gap (+1.0%), successfully addressing the non-stationarity limitations of standard CSP.
-
-### Submission 4: Evaluation Framework & Data Augmentation (Week 5)
-
-Moving beyond standard accuracy metrics, this phase introduces a strict 4-Pillar evaluation framework to test model viability for online BCI deployment, introduces Deep Learning (EEGNet), and applies data augmentation to improve robustness.
-Evaluation Framework (eval.py, models.py, visualize.py & data_augmentation.py):
-
-We built a comprehensive CLI tool evaluating models across four key pillars:
-
-    Accuracy: 
-    Macro-F1, Balanced Accuracy, and Confusion Matrices.
-
-    Reliability: 
-    Expected Calibration Error (ECE), Brier Score, and Calibration Curves.
-
-    Efficiency: 
-    Computational latency and Information Transfer Rate (ITR). ITR not implemented yet, as Inference-time between EEGNet only models is similar and accuracy is given.
-
-    Generalization: 
-    Performance degradation across Noisy, Cross-Session, and Cross-Subject settings.
-
-
-#### 🛠️ CLI Reference (Command-Line Flags)
-
-#### `eval.py` (The Evaluation Engine)
-This script orchestrates the 4-Pillar evaluation and routes the data according to the selected protocol.
-
-| Flag | Type | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `--model` | `str` | `"eegnet"` | The architecture to evaluate (e.g., `eegnet`, `lda`). |
-| `--protocol` | `str` | `"baseline"` | The testing condition: `baseline`, `noisy`, `cross-session`, `cross-subject` (or `loso`). |
-| `--seeds` | `int` | `3` | Number of random seeds to average across for robustness (max 5). |
-| `--data` | `str` | `"./data/bci2a_dataset"` | Path to the raw BCI dataset. |
-| `--out` | `str` | `"./week5/results/..."` | Output directory where the metrics CSVs and JSONs will be saved. |
-| `--weights` | `str` | `None` | Optional path to a `.pt` file to bypass training and load pre-trained weights. |
-| `--acq_delay` | `float` | `4.0` | (Advanced) Expected acquisition delay in seconds for latency metric calculation. |
-| `--meth_delay`| `float` | `0.0` | (Advanced) Expected methodological buffering delay in seconds. |
-| `--input_augment` | `flag` | `False` | Apply input-space data augmentation (Gaussian noise & amplitude scaling) before training. |
-| `--mixup_augment` | `flag` | `False` | Apply Mixup feature-space augmentation during training. |
-
-*Example Usage:*
-`uv run python -m week5.eval --model eegnet --data ./data/bci2a_dataset --protocol cross-subject --seeds 3 --out ./week5/results/eegnet/cross-subject/runcudatest --input_augment `
-
-#### `visualize.py` (The Dashboard Generator)
-This script reads the raw outputs generated by `eval.py` and translates them into presentation-ready graphics.
-
-| Flag | Type | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `--dir` | `str` | `"week5/results"` | The root directory where your model's results are stored. |
-| `--model` | `str` | `"EEGNet"` | The name of the model to display in the titles of the generated PNGs. |
-| `--protocols` | `str` | `"all"` | Which folders to plot. Use `"all"` for the master summary, or a comma-separated list (e.g., `"baseline,noisy"`). |
-| `--run` | `str` | `"latest"` | Strict consistency guard switch. If set to `"latest"`, it auto-detects the newest directory globally and enforces it across all selected protocols to prevent mixing execution configurations. Can be explicitly hardcoded (e.g., `--run runcudatest`). |
-
-*Example Output Assets:*
-* Individual 4-Pillar dashboards are saved in their respective directories (e.g., `week5/results/eegnet/cross-subject/runcudatest/accuracy_pillar.png`).
-* The cross-condition visualization is saved with the active run appended directly to the filename root: `week5/results/eegnet/master_degradation_summary_<run_name>.png`.
-
-*Example Usage:*
-`uv run python -m week5.visualize --dir ./week5/results/eegnet --model eegnet --protocols all --run latest`
-
-Data Augmentation
-
-To reduce the domain gap and improve Expected Calibration Error (ECE) for improved robust predictions, we introduced data augmentation strategies into the pipeline.
-- **Input-Space Augmentation:** Uses Gaussian noise addition and amplitude scaling to expand the training data variability natively.
-- **Mixup Augmentation:** Applies linear interpolation between random training examples and their labels during batch processing to encourage smoother decision boundaries.
-
-## Local Repository Structure
-
+```bash
+python -m mind_the_lasers.src.stream.key_press
 ```
-practical-ss26-team4/       # Project root
-├── data/                   # Raw EEG data (.xdf files) and BCI2a datasets (.mat)
-├── features/               # Extracted feature binaries (e.g., all_features.pkl)
-├── plots/                  # Generated visual assets for reports (filtering, ICA)
-├── plots_MI/               # MI-specific plots post analysis
-├── week3/                  # Signal Preprocessing & Characterization
-│   ├── artifact_removal_A2.py
-│   ├── filtering_A1.py
-│   ├── loading_helpers.py
-│   ├── mi_evaluate_plots.py
-│   ├── signal_analysis_A3.py
-│   └── tests/
-├── week4/                  # Feature Extraction & Classification
-│   ├── classification.py
-│   ├── feature_extraction.py
-│   ├── loading.py
-│   ├── plotting.py
-│   └── preprocessing.py
-├── week5/                  # Evaluation Framework & Deep Learning (EEGNet)
-│   ├── data_augmentation.py# Input-space and Mixup augmentation techniques
-│   ├── eval.py             # 4-Pillar Evaluation script & data router
-│   ├── models.py           # ML/DL architectures and Scikit-Learn PyTorch wrapper
-│   ├── visualize.py        # Dashboard generation (Accuracy, Reliability, Efficiency)
-│   └── results/            # Auto-generated CSV metrics and PNG plots
-├── pyproject.toml          # Project configuration and dependencies (Windows)
-├── uv.lock                 # Locked dependencies
-└── README.md               # This file
+
+This modular execution allows each subsystem (streaming, classification, communication, and gameplay) to be tested independently before performing a full end-to-end experiment.
+
+#### 5. Visualize decoding metrics
+
+```bash
+python -m mind_the_lasers.src.visualization.visualize_decoder_metrics --json mind_the_lasers/reports/decoder_summary_eegnet_0001.json mind_the_lasers/reports/decoder_summary_zp-csp-lda_0001.json
 ```
- 
+
+#### 5. Visualize game metrics
+
+```bash
+python -m mind_the_lasers.src.visualization.visualize_training
+```
+
+```bash
+python -m mind_the_lasers.src.visualization.visualize_play
+```
