@@ -1,7 +1,8 @@
 # Mind The Lasers
 
 **Technical University of Munich (TUM) - BCI Practical Course SS26**
-**Team 4:** Daniel Cortez de Oliveira Marche Barros, Jens von Greiff, Martin Waxenberger
+
+Authors: Jens von Greiff, Daniel Cortez de Oliveira Marche Barros, Martin Waxenberger
 
 ## 1. Project Overview
 
