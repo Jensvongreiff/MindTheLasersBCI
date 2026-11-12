@@ -28,6 +28,58 @@ class KeyboardController:
         return Command.NONE
 
 
+class ContinuousKeyboardController:
+    def __init__(self):
+        self.command = Command.REST
+        self.confidence = 0.0
+        self.new_prediction = None
+        self.pressed_keys = set()
+
+    @staticmethod
+    def _read_pressed_keys():
+        keys = pygame.key.get_pressed()
+        return {
+            key
+            for key in (pygame.K_DOWN, pygame.K_RIGHT, pygame.K_LEFT)
+            if keys[key]
+        }
+
+    @staticmethod
+    def _command_for(pressed_keys):
+        if pygame.K_DOWN in pressed_keys:
+            return Command.REST
+
+        if pygame.K_RIGHT in pressed_keys:
+            return Command.RIGHT
+
+        if pygame.K_LEFT in pressed_keys:
+            return Command.LEFT
+
+        return Command.REST
+
+    def update(self):
+        pressed_keys = self._read_pressed_keys()
+        self.command = self._command_for(pressed_keys)
+
+        if pressed_keys - self.pressed_keys:
+            self.new_prediction = self.command
+            self.confidence = 1.0
+
+        self.pressed_keys = pressed_keys
+
+    def get_command(self):
+        return self.command
+
+    def get_new_prediction(self):
+        prediction = self.new_prediction
+        self.new_prediction = None
+        return prediction
+
+    def reset(self):
+        self.pressed_keys = self._read_pressed_keys()
+        self.command = self._command_for(self.pressed_keys)
+        self.new_prediction = None
+        self.confidence = 0.0
 
 class UDPController:
     def __init__(self, ip="127.0.0.1", port=5005):

@@ -54,7 +54,7 @@ def main():
 
     parser.add_argument(
         "--controller",
-        choices=["pipeline", "keyboard", "both"],
+        choices=["pipeline", "keyboard", "local_keyboard", "both"],
         default="pipeline",
         help="Input source for the game.",
     )
@@ -156,6 +156,8 @@ def main():
                 sys.executable,
                 "-m",
                 "mind_the_lasers.src.game.run_game",
+                "--controller",
+                args.controller,
             ]
         )
 

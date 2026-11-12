@@ -239,7 +239,7 @@ class Game:
         if self.game_over:
             self.draw_game_over()
 
-        pygame.display.flip()
+        # The main loop presents this logical canvas after scaling it.
 
 
     def draw_summary(self):
